@@ -1,79 +1,88 @@
-const API_BASE = "http://localhost:3001";
+// Central API fetch wrapper (uses Vite proxy: /api -> http://localhost:3001)
 
 export async function apiFetch(path, options = {}) {
-  const headers = {
-    ...options.headers,
-  };
+  const headers = new Headers(options.headers || {});
 
-  // ONLY set Content-Type if there is a body
-  if (options.body) {
-    headers["Content-Type"] = "application/json";
+  // Only set Content-Type for JSON payloads
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (options.body && !isFormData) {
+    headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  // TEMP AUTH STUB (until real auth is wired)
+  headers.set("x-user-id", "789f4880-24ec-403c-a636-c25ddadc5845");
+  headers.set("x-org-slug", "ottumwa");
+
+  const res = await fetch(`/api${path}`, {
     ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    let error = "API error";
-    try {
-      const data = await response.json();
-      error = data.error || error;
-    } catch (_) {}
-    throw new Error(error);
-  }
-
-  return response.json();
-}
-
-export function getEvents(headers) {
-  return apiFetch("/events", { headers });
-}
-
-export function createEvent(data, headers) {
-  return apiFetch("/events", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(data)
-  });
-}
-
-export function updateEvent(id, data, headers) {
-  return apiFetch(`/events/${id}`, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(data)
-  });
-}
-
-export function getUsers(headers) {
-  return apiFetch("/users", { headers });
-}
-
-export function getEventBudget(eventId, headers) {
-  return apiFetch(`/events/${eventId}/budget`, { headers });
-}
-
-export function addBudgetItem(eventId, data, headers) {
-  return apiFetch(`/events/${eventId}/budget`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(data)
-  });
-}
-
-export function deleteBudgetItem(id, headers) {
-  return apiFetch(`/budget/${id}`, {
-    method: "DELETE",
     headers
   });
+
+  const text = await res.text();
+  let data;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!res.ok) {
+    const msg = data?.error || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
 }
 
-export function getEventBudgetTotals(eventId, headers) {
-  return apiFetch(`/events/${eventId}/budget/totals`, { headers });
+// ----------------------
+// Domain helpers
+// ----------------------
+
+export function getEvents() {
+  return apiFetch("/events");
 }
 
-export function getBudgetCategories(headers) {
-  return apiFetch("/budget-categories", { headers });
+export function createEvent(data) {
+  return apiFetch("/events", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function updateEvent(id, data) {
+  return apiFetch(`/events/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
+}
+
+export function getUsers() {
+  return apiFetch("/users");
+}
+
+export function getEventBudget(eventId) {
+  return apiFetch(`/events/${eventId}/budget`);
+}
+
+export function addBudgetItem(eventId, data) {
+  return apiFetch(`/events/${eventId}/budget`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function deleteBudgetItem(id) {
+  return apiFetch(`/budget/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export function getEventBudgetTotals(eventId) {
+  return apiFetch(`/events/${eventId}/budget/totals`);
+}
+
+export function getBudgetCategories() {
+  return apiFetch("/budget-categories");
 }
