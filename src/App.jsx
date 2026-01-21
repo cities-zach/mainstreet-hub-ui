@@ -1,7 +1,9 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/queryClient";
 import { apiFetch } from "@/api";
+import { supabase } from "@/lib/supabaseClient";
 
 /* ---------- CORE PAGES ---------- */
 import Dashboard from "@/pages/Dashboard";
@@ -41,23 +43,60 @@ import TeamBuilder from "@/pages/TeamBuilder";
 import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
 import AppShell from "@/components/layout/AppShell";
+import Login from "@/pages/Login";
 
 function AppInner() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, nextSession) => {
+        setSession(nextSession);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
   const {
     data: me,
     isLoading,
     error
   } = useQuery({
     queryKey: ["me"],
-    queryFn: () => apiFetch("/me")
+    queryFn: () => apiFetch("/me"),
+    enabled: !!session
   });
 
+  if (authLoading) return <p>Loading…</p>;
+  if (!session) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
   if (isLoading) return <p>Loading…</p>;
   if (error) return <p style={{ color: "red" }}>{error.message}</p>;
 
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/login" element={<Navigate to="/" replace />} />
         <Route element={<AppShell me={me} />}>
           {/* ---------- HOME ---------- */}
           <Route path="/" element={<Dashboard me={me} />} />

@@ -1,5 +1,7 @@
 // Central API fetch wrapper (uses Vite proxy: /api -> http://localhost:3001)
 
+import { supabase } from "@/lib/supabaseClient";
+
 export async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
 
@@ -10,8 +12,16 @@ export async function apiFetch(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  // TEMP AUTH STUB (until real auth is wired)
-  headers.set("x-user-id", "789f4880-24ec-403c-a636-c25ddadc5845");
+  // Auth header from Supabase session
+  const { data: sessionData } = await supabase.auth.getSession();
+  const sessionUserId = sessionData?.session?.user?.id;
+  const sessionUserEmail = sessionData?.session?.user?.email;
+  if (sessionUserId) {
+    headers.set("x-user-id", sessionUserId);
+  }
+  if (sessionUserEmail) {
+    headers.set("x-user-email", sessionUserEmail);
+  }
   headers.set("x-org-slug", "ottumwa");
 
   const res = await fetch(`/api${path}`, {

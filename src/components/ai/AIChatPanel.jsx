@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
-import { Bot, Send, X } from "lucide-react";
+import { Bot, Minus, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/api";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const DEFAULT_MESSAGE = {
   role: "assistant",
   content:
-    "Hi! I'm Fred. I can help you navigate MainSuite, answer questions, or draft event content. How can I help?",
+    "Hi! I'm your Friendly Resource for Exploring Downtown, but you can call me FRED! I can help you navigate MainSuite, answer questions or draft event content. Where should we begin?",
 };
 
 export default function AIChatPanel({ isOpen, onClose }) {
@@ -16,14 +16,33 @@ export default function AIChatPanel({ isOpen, onClose }) {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [isNearBottom, setIsNearBottom] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const messagesRef = useRef(null);
   const bottomRef = useRef(null);
 
   const hasMessages = useMemo(() => messages.length > 0, [messages.length]);
 
   useEffect(() => {
     if (!isOpen) return;
+    const container = messagesRef.current;
+    if (container) {
+      container.scrollTop = 0;
+    }
+    setIsNearBottom(false);
+    setIsMinimized(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isNearBottom) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [isOpen, messages]);
+  }, [isOpen, messages, isNearBottom]);
+
+  const handleScroll = (event) => {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    setIsNearBottom(distanceFromBottom < 80);
+  };
 
   const sendMessage = async () => {
     const trimmed = input.trim();
@@ -73,29 +92,65 @@ export default function AIChatPanel({ isOpen, onClose }) {
     }
   };
 
+  if (!isOpen) return null;
+
+  if (isMinimized) {
+    return (
+      <div className="flex items-center gap-2 rounded-full bg-white/95 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 shadow-lg px-3 py-2">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-100"
+          onClick={() => setIsMinimized(false)}
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#835879]/15 text-[#835879]">
+            <Bot className="w-4 h-4" />
+          </span>
+          FRED
+        </button>
+        <button
+          type="button"
+          className="ml-1 rounded-full p-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          onClick={onClose}
+          aria-label="Close Fred"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <aside
-      className={cn(
-        "flex flex-col bg-white/90 dark:bg-slate-950/80 border-l border-slate-200 dark:border-slate-800 transition-all duration-300",
-        isOpen ? "w-[360px] opacity-100" : "w-0 opacity-0 pointer-events-none"
-      )}
-    >
+    <aside className="flex flex-col w-[360px] max-h-[70vh] bg-white/95 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100">
           <Bot className="w-5 h-5 text-[#835879]" />
-          <span className="font-semibold">Fred</span>
+          <span className="font-semibold">FRED</span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-slate-500"
-          onClick={onClose}
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-slate-500"
+            onClick={() => setIsMinimized(true)}
+          >
+            <Minus className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-slate-500"
+            onClick={onClose}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div
+        ref={messagesRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+      >
         {!hasMessages && (
           <p className="text-sm text-slate-500">
             Ask me anything about MainSuite.
@@ -114,6 +169,22 @@ export default function AIChatPanel({ isOpen, onClose }) {
             {msg.content}
           </div>
         ))}
+        {isSending && (
+          <div className="max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100">
+            <div className="flex items-center gap-1">
+              <span className="sr-only">Fred is typing</span>
+              <span className="h-2 w-2 rounded-full bg-slate-400/80 animate-pulse" />
+              <span
+                className="h-2 w-2 rounded-full bg-slate-400/80 animate-pulse"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="h-2 w-2 rounded-full bg-slate-400/80 animate-pulse"
+                style={{ animationDelay: "300ms" }}
+              />
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 

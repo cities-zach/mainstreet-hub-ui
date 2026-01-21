@@ -108,7 +108,7 @@ export default function AppShell({ me }) {
             onClick={() => setChatOpen((prev) => !prev)}
           >
             <Bot className="w-4 h-4" />
-            {chatOpen ? "Hide Fred" : "Open Fred"}
+            {chatOpen ? "Hide FRED" : "Open FRED"}
           </Button>
           <Button asChild variant="outline">
             <Link to="/settings">
@@ -151,7 +151,11 @@ export default function AppShell({ me }) {
           <Outlet />
         </main>
 
-        <AIChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+        {chatOpen && (
+          <div className="fixed bottom-4 right-4 z-50">
+            <AIChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+          </div>
+        )}
       </div>
     </div>
   );
