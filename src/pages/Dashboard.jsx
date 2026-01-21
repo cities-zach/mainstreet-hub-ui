@@ -9,6 +9,9 @@ import {
   Package,
   Users,
   ClipboardList,
+  LineChart,
+  Mic,
+  BookOpen,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import ThreeMonthCalendar from "@/components/dashboard/ThreeMonthCalendar";
@@ -92,6 +95,27 @@ export default function Dashboard() {
       icon: ClipboardList,
       url: "/feedback",
       color: "#0891b2",
+    },
+    {
+      title: "InvestorTrack",
+      description: "Track supporters, gifts, and investor engagement.",
+      icon: LineChart,
+      url: "/investors",
+      color: "#6366f1",
+    },
+    {
+      title: "NoteTaker",
+      description: "Upload meetings, review notes, and create tasks.",
+      icon: Mic,
+      url: "/meeting-notes",
+      color: "#10b981",
+    },
+    {
+      title: "RAGTime",
+      description: "Manage the knowledge base that powers Fred.",
+      icon: BookOpen,
+      url: "/ragtime",
+      color: "#f97316",
     },
   ];
 

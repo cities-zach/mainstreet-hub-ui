@@ -7,6 +7,7 @@ import { apiFetch } from "@/api";
 import Dashboard from "@/pages/Dashboard";
 import MasterPlanner from "@/pages/MasterPlanner";
 import EventPlanForm from "@/pages/EventPlanForm";
+import MeetingNotes from "@/pages/MeetingNotes";
 
 /* ---------- BUDGET / FINANCE ---------- */
 import PocketBook from "@/pages/PocketBook";
@@ -28,6 +29,7 @@ import TaskMaster from "@/pages/TaskMaster";
 
 /* ---------- CRM / INVESTORS ---------- */
 import InvestorTrack from "@/pages/InvestorTrack";
+import RAGTime from "@/pages/RAGTime";
 
 /* ---------- INVENTORY ---------- */
 import SupplyStop from "@/pages/SupplyStop";
@@ -38,6 +40,7 @@ import TeamBuilder from "@/pages/TeamBuilder";
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
+import AppShell from "@/components/layout/AppShell";
 
 function AppInner() {
   const {
@@ -55,53 +58,57 @@ function AppInner() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route element={<AppShell me={me} />}>
+          {/* ---------- HOME ---------- */}
+          <Route path="/" element={<Dashboard me={me} />} />
 
-        {/* ---------- HOME ---------- */}
-        <Route path="/" element={<Dashboard me={me} />} />
+          {/* ---------- MASTER PLANNING ---------- */}
+          <Route path="/master-planner" element={<MasterPlanner />} />
+          <Route path="/event-plan" element={<EventPlanForm />} />
+          <Route path="/meeting-notes" element={<MeetingNotes />} />
 
-        {/* ---------- MASTER PLANNING ---------- */}
-        <Route path="/master-planner" element={<MasterPlanner />} />
-        <Route path="/event-plan" element={<EventPlanForm />} />
+          {/* ---------- BUDGET ---------- */}
+          <Route path="/pocketbook" element={<PocketBook />} />
+          <Route path="/budget-details" element={<BudgetDetails />} />
 
-        {/* ---------- BUDGET ---------- */}
-        <Route path="/pocketbook" element={<PocketBook />} />
-        <Route path="/budget-details" element={<BudgetDetails />} />
+          {/* ---------- MARKETING ---------- */}
+          <Route path="/marketstreet" element={<MarketStreet />} />
+          <Route path="/marketstreet/new" element={<CreateRequest />} />
+          <Route path="/marketstreet/request" element={<RequestDetails />} />
 
-        {/* ---------- MARKETING ---------- */}
-        <Route path="/marketstreet" element={<MarketStreet />} />
-        <Route path="/marketstreet/new" element={<CreateRequest />} />
-        <Route path="/marketstreet/request" element={<RequestDetails />} />
+          {/* ---------- FEEDBACK ---------- */}
+          <Route path="/feedback" element={<FeedBack />} />
+          <Route path="/feedback/builder" element={<SurveyBuilder />} />
+          <Route path="/feedback/public" element={<PublicSurvey />} />
+          <Route path="/feedback/results" element={<SurveyResults />} />
 
-        {/* ---------- FEEDBACK ---------- */}
-        <Route path="/feedback" element={<FeedBack />} />
-        <Route path="/feedback/builder" element={<SurveyBuilder />} />
-        <Route path="/feedback/public" element={<PublicSurvey />} />
-        <Route path="/feedback/results" element={<SurveyResults />} />
+          {/* ---------- TASKS ---------- */}
+          <Route path="/taskmaster" element={<TaskMaster />} />
 
-        {/* ---------- TASKS ---------- */}
-        <Route path="/taskmaster" element={<TaskMaster />} />
+          {/* ---------- INVESTORS ---------- */}
+          <Route path="/investors" element={<InvestorTrack />} />
 
-        {/* ---------- INVESTORS ---------- */}
-        <Route path="/investors" element={<InvestorTrack />} />
+          {/* ---------- RAGTIME ---------- */}
+          <Route path="/ragtime" element={<RAGTime />} />
 
-        {/* ---------- SUPPLY ---------- */}
-        <Route path="/supplystop" element={<SupplyStop />} />
+          {/* ---------- SUPPLY ---------- */}
+          <Route path="/supplystop" element={<SupplyStop />} />
 
-        {/* ---------- VOLUNTEERS ---------- */}
-        <Route path="/teambuilder" element={<TeamBuilder />} />
+          {/* ---------- VOLUNTEERS ---------- */}
+          <Route path="/teambuilder" element={<TeamBuilder />} />
 
-        {/* ---------- SETTINGS ---------- */}
-        <Route
-          path="/settings"
-          element={
-            <Settings
-              currentUser={me?.user}
-              isSuperAdmin={me?.user?.role === "super_admin"}
-            />
-          }
-        />
-        <Route path="/settings/users" element={<UserManagement />} />
-
+          {/* ---------- SETTINGS ---------- */}
+          <Route
+            path="/settings"
+            element={
+              <Settings
+                currentUser={me?.user}
+                isSuperAdmin={me?.user?.role === "super_admin"}
+              />
+            }
+          />
+          <Route path="/settings/users" element={<UserManagement />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
