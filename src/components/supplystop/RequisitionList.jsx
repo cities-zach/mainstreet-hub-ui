@@ -10,6 +10,17 @@ export default function RequisitionList({ isAdmin, currentUser }) {
     queryFn: () => apiFetch("/requisitions")
   });
 
+  const formatNeededBy = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+  };
+
   const approveMutation = useMutation({
     mutationFn: (reqId) =>
       apiFetch(`/requisitions/${reqId}`, {
@@ -33,6 +44,9 @@ export default function RequisitionList({ isAdmin, currentUser }) {
           <div>
             <div className="font-medium">{req.title}</div>
             <div className="text-xs text-slate-500">Status: {req.status}</div>
+            {req.needed_by && (
+              <div className="text-xs text-slate-500">Needed by: {formatNeededBy(req.needed_by)}</div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && req.status === "submitted" && (

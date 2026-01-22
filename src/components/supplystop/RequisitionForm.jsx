@@ -9,6 +9,7 @@ export default function RequisitionForm({ inventory = [], onSuccess, onCancel })
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [neededBy, setNeededBy] = useState("");
   const [selectedItems, setSelectedItems] = useState({});
 
   const itemsArray = useMemo(
@@ -26,6 +27,7 @@ export default function RequisitionForm({ inventory = [], onSuccess, onCancel })
         body: JSON.stringify({
           title,
           description,
+          needed_by: neededBy || null,
           amount: null
         })
       });
@@ -47,6 +49,7 @@ export default function RequisitionForm({ inventory = [], onSuccess, onCancel })
       onSuccess?.();
       setTitle("");
       setDescription("");
+      setNeededBy("");
       setSelectedItems({});
     }
   });
@@ -67,6 +70,10 @@ export default function RequisitionForm({ inventory = [], onSuccess, onCancel })
       <div className="space-y-2">
         <Label>Description</Label>
         <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Needed By</Label>
+        <Input type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
       </div>
       <div className="space-y-2">
         <Label>Select Items *</Label>
