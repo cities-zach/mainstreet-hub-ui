@@ -22,6 +22,8 @@ import {
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
 
 /* ---------------- API HELPERS ---------------- */
 
@@ -41,10 +43,23 @@ const updateUser = async ({ id, data }) => {
   });
 };
 
+const fetchInvites = async () => {
+  return apiFetch("/invites");
+};
+
+const createInvite = async (data) => {
+  return apiFetch("/invites", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
 /* ---------------- COMPONENT ---------------- */
 
 export default function UserManagement() {
   const [search, setSearch] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("volunteer");
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -57,10 +72,28 @@ export default function UserManagement() {
     queryFn: fetchUsers,
   });
 
+  const { data: invites = [] } = useQuery({
+    queryKey: ["invites"],
+    queryFn: fetchInvites,
+  });
+
   const updateUserMutation = useMutation({
     mutationFn: updateUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: createInvite,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invites"] });
+      setInviteEmail("");
+      setInviteRole("volunteer");
+      toast.success("Invite sent");
+    },
+    onError: (error) => {
+      toast.error(error?.message || "Failed to send invite");
     },
   });
 
@@ -78,10 +111,16 @@ export default function UserManagement() {
     });
   };
 
+  const handleInviteSubmit = (event) => {
+    event.preventDefault();
+    if (!inviteEmail.trim()) return;
+    inviteMutation.mutate({ email: inviteEmail.trim(), role: inviteRole });
+  };
+
   if (isLoading) return <div className="p-8">Loading users…</div>;
 
   /* Frontend gate (backend MUST enforce too) */
-  if (currentUser?.role !== "super_admin") {
+  if (currentUser?.role !== "super_admin" && currentUser?.role !== "admin") {
     return (
       <div className="min-h-screen p-8 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
@@ -128,6 +167,64 @@ export default function UserManagement() {
             />
           </div>
         </div>
+
+        {/* Invite Users */}
+        <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+          <CardContent className="p-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">
+                Invite a user
+              </h2>
+              <p className="text-sm text-slate-500">
+                Send a secure invite link to add someone to your organization.
+              </p>
+            </div>
+            <form
+              onSubmit={handleInviteSubmit}
+              className="grid grid-cols-1 md:grid-cols-3 gap-3"
+            >
+              <div className="md:col-span-2 space-y-2">
+                <Label>Email</Label>
+                <Input
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="name@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="event_champion">
+                      Event Champion
+                    </SelectItem>
+                    <SelectItem value="volunteer">Volunteer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-3 flex justify-end">
+                <Button
+                  type="submit"
+                  className="bg-[#835879] text-white"
+                  disabled={inviteMutation.isPending}
+                >
+                  {inviteMutation.isPending ? "Sending…" : "Send Invite"}
+                </Button>
+              </div>
+            </form>
+            {invites.length > 0 && (
+              <div className="text-sm text-slate-600">
+                {invites.filter((i) => !i.used_at).length} pending invite
+                {invites.filter((i) => !i.used_at).length === 1 ? "" : "s"}.
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* User Table */}
         <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">

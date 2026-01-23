@@ -44,6 +44,7 @@ import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
 import AppShell from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
+import InviteAccept from "@/pages/InviteAccept";
 
 function AppInner() {
   const [session, setSession] = useState(null);
@@ -85,6 +86,7 @@ function AppInner() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/invite" element={<InviteAccept />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
@@ -97,6 +99,7 @@ function AppInner() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/invite" element={<InviteAccept />} />
         <Route element={<AppShell me={me} />}>
           {/* ---------- HOME ---------- */}
           <Route path="/" element={<Dashboard me={me} />} />
