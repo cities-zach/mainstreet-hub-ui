@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
-import { Bot, Minus, Send, X } from "lucide-react";
+import { Bot, Minus, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/api";
@@ -106,14 +106,6 @@ export default function AIChatPanel({ isOpen, onClose }) {
             <Bot className="w-4 h-4" />
           </span>
           FRED
-        </button>
-        <button
-          type="button"
-          className="ml-1 rounded-full p-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-          onClick={onClose}
-          aria-label="Close Fred"
-        >
-          <X className="w-4 h-4" />
         </button>
       </div>
     );

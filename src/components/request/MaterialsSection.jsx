@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api";
+import { toast } from "sonner";
+import { uploadPublicFile } from "@/lib/uploads";
 
 export default function MaterialsSection({
   request,
@@ -16,6 +18,7 @@ export default function MaterialsSection({
 }) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     material_type: "",
     file_name: "",
@@ -42,6 +45,29 @@ export default function MaterialsSection({
     createMutation.mutate(formData);
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const uploaded = await uploadPublicFile({
+        pathPrefix: `marketing-materials/${request.id}`,
+        file,
+      });
+      setFormData((prev) => ({
+        ...prev,
+        file_name: uploaded.file_name || prev.file_name,
+        file_url: uploaded.file_url || prev.file_url,
+      }));
+    } catch (error) {
+      toast.error(error?.message || "Failed to upload file");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
   return (
     <Card className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -62,6 +88,13 @@ export default function MaterialsSection({
                 onChange={(e) => setFormData({ ...formData, material_type: e.target.value })}
                 placeholder="e.g. Facebook Post"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label>Upload File</Label>
+              <Input type="file" onChange={handleFileUpload} disabled={uploading} />
+              {uploading && (
+                <p className="text-xs text-slate-500">Uploading...</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>File Name</Label>
