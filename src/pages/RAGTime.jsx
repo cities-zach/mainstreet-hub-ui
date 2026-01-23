@@ -42,21 +42,73 @@ export default function RAGTime() {
     },
   });
 
+  const uploadFileDoc = useMutation({
+    mutationFn: (data) =>
+      apiFetch("/ai/knowledge/upload-file", {
+        method: "POST",
+        body: data,
+      }),
+    onSuccess: () => {
+      setStatus({ type: "success", message: "File processed and saved to RAGTime." });
+      setTitle("");
+      setSource("");
+      setTags("");
+      setContent("");
+      setUploadingFile(false);
+    },
+    onError: (error) => {
+      setStatus({ type: "error", message: error.message || "Upload failed." });
+      setUploadingFile(false);
+    },
+  });
+
   const handleFileUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const allowed = [
+    const allowedText = [
       "text/plain",
       "text/markdown",
       "text/csv",
       "application/json",
     ];
+    const isPdf =
+      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const isDocx =
+      file.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      file.name.toLowerCase().endsWith(".docx");
+    const isDoc = file.type === "application/msword" || file.name.toLowerCase().endsWith(".doc");
 
-    if (!allowed.includes(file.type)) {
+    if (isDoc) {
       setStatus({
         type: "error",
-        message: "Only text, markdown, CSV, or JSON files are supported.",
+        message: "Please upload a .docx file instead of .doc.",
+      });
+      event.target.value = "";
+      return;
+    }
+
+    if (isPdf || isDocx) {
+      setUploadingFile(true);
+      const form = new FormData();
+      const nextTitle = title || file.name;
+      const nextSource = source || file.name;
+      form.append("file", file);
+      form.append("title", nextTitle);
+      form.append("source", nextSource);
+      if (tags.trim()) {
+        form.append("tags", tags);
+      }
+      uploadFileDoc.mutate(form);
+      event.target.value = "";
+      return;
+    }
+
+    if (!allowedText.includes(file.type)) {
+      setStatus({
+        type: "error",
+        message: "Only text, markdown, CSV, JSON, PDF, or DOCX files are supported.",
       });
       event.target.value = "";
       return;
@@ -102,15 +154,15 @@ export default function RAGTime() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Upload file (text only)</Label>
+              <Label>Upload file</Label>
               <Input
                 type="file"
-                accept=".txt,.md,.csv,.json"
+                accept=".txt,.md,.csv,.json,.pdf,.docx"
                 onChange={handleFileUpload}
-                disabled={uploadingFile}
+                disabled={uploadingFile || uploadFileDoc.isPending}
               />
               <p className="text-xs text-slate-500 mt-1">
-                Supported: .txt, .md, .csv, .json
+                Supported: .txt, .md, .csv, .json, .pdf, .docx
               </p>
             </div>
             <div>

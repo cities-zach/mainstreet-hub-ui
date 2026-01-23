@@ -67,7 +67,11 @@ export default function RequestDetails() {
     );
   }
 
-  const isRequester = user && user.email === request.created_by;
+  const isRequester =
+    user &&
+    user.email &&
+    request.created_by &&
+    user.email.toLowerCase() === request.created_by.toLowerCase();
   const isAdmin = user && (user.role === "admin" || user.role === "super_admin");
   const canUploadMaterials = isAdmin || isRequester;
 

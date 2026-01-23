@@ -17,6 +17,7 @@ export default function AIChatPanel({ isOpen, onClose }) {
   const [isSending, setIsSending] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [isNearBottom, setIsNearBottom] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const messagesRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -29,6 +30,7 @@ export default function AIChatPanel({ isOpen, onClose }) {
       container.scrollTop = 0;
     }
     setIsNearBottom(false);
+    setIsMinimized(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -92,6 +94,23 @@ export default function AIChatPanel({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
+  if (isMinimized) {
+    return (
+      <div className="flex items-center gap-2 rounded-full bg-white/95 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 shadow-lg px-3 py-2">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-100"
+          onClick={() => setIsMinimized(false)}
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#835879]/15 text-[#835879]">
+            <Bot className="w-4 h-4" />
+          </span>
+          FRED
+        </button>
+      </div>
+    );
+  }
+
   return (
     <aside className="flex flex-col w-[92vw] sm:w-[360px] max-h-[75vh] sm:max-h-[70vh] bg-white/95 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
@@ -104,7 +123,7 @@ export default function AIChatPanel({ isOpen, onClose }) {
             variant="ghost"
             size="icon"
             className="text-slate-500"
-            onClick={onClose}
+            onClick={() => setIsMinimized(true)}
           >
             <Minus className="w-4 h-4" />
           </Button>
