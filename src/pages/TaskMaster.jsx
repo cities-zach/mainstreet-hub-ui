@@ -45,6 +45,12 @@ export default function TaskMaster() {
     queryFn: () => apiFetch("/events")
   });
 
+  const { data: soundSettings } = useQuery({
+    queryKey: ["sound_settings"],
+    queryFn: () => apiFetch("/system/settings/sounds"),
+    enabled: !!user,
+  });
+
   if (isLoading || !user) {
     return <div className="p-8 text-center">Loading tasks...</div>;
   }
@@ -190,6 +196,7 @@ export default function TaskMaster() {
                       key={task.id}
                       task={task}
                       currentUser={user}
+                      taskCompletionSoundUrl={soundSettings?.task_completion_sound_url || ""}
                       onUpdate={() =>
                         queryClient.invalidateQueries({ queryKey: ["tasks"] })
                       }

@@ -3,7 +3,13 @@ import { CheckCircle, Circle } from "lucide-react";
 import { apiFetch } from "@/api";
 import { toast } from "sonner";
 
-export default function TaskItem({ task, currentUser, onUpdate, onLevelUp }) {
+export default function TaskItem({
+  task,
+  currentUser,
+  onUpdate,
+  onLevelUp,
+  taskCompletionSoundUrl = "",
+}) {
   if (!task) return null;
 
   const completed = task.status === "completed";
@@ -20,6 +26,9 @@ export default function TaskItem({ task, currentUser, onUpdate, onLevelUp }) {
       });
       onUpdate?.();
       if (nextStatus === "completed") {
+        if (taskCompletionSoundUrl) {
+          new Audio(taskCompletionSoundUrl).play().catch(() => {});
+        }
         toast.success("Task completed");
       }
     } catch (err) {
