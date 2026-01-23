@@ -44,6 +44,12 @@ export default function InviteAccept() {
     setNotice(null);
 
     try {
+      const { data: existingSession } = await supabase.auth.getSession();
+      const existingEmail = existingSession?.session?.user?.email?.toLowerCase();
+      if (existingEmail && existingEmail !== email.toLowerCase()) {
+        await supabase.auth.signOut();
+      }
+
       const signUpResult = await supabase.auth.signUp({
         email,
         password,
