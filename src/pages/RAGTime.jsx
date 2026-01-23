@@ -14,6 +14,7 @@ export default function RAGTime() {
   const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
   const [status, setStatus] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const uploadDoc = useMutation({
     mutationFn: () =>
@@ -41,6 +42,47 @@ export default function RAGTime() {
     },
   });
 
+  const handleFileUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowed = [
+      "text/plain",
+      "text/markdown",
+      "text/csv",
+      "application/json",
+    ];
+
+    if (!allowed.includes(file.type)) {
+      setStatus({
+        type: "error",
+        message: "Only text, markdown, CSV, or JSON files are supported.",
+      });
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingFile(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result?.toString() || "";
+      setContent(text);
+      if (!title) {
+        setTitle(file.name);
+      }
+      if (!source) {
+        setSource(file.name);
+      }
+      setUploadingFile(false);
+    };
+    reader.onerror = () => {
+      setStatus({ type: "error", message: "Unable to read the file." });
+      setUploadingFile(false);
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  };
+
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -59,6 +101,18 @@ export default function RAGTime() {
             <CardTitle>Knowledge upload</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div>
+              <Label>Upload file (text only)</Label>
+              <Input
+                type="file"
+                accept=".txt,.md,.csv,.json"
+                onChange={handleFileUpload}
+                disabled={uploadingFile}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Supported: .txt, .md, .csv, .json
+              </p>
+            </div>
             <div>
               <Label>Title</Label>
               <Input

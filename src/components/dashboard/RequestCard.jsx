@@ -11,9 +11,12 @@ export default function RequestCard({ request }) {
 
   const statusColors = {
     draft: "bg-slate-100 text-slate-700",
-    submitted: "bg-blue-100 text-blue-800",
+    pending: "bg-amber-100 text-amber-800",
+    in_progress: "bg-blue-100 text-blue-800",
+    review: "bg-purple-100 text-purple-800",
     approved: "bg-green-100 text-green-800",
     rejected: "bg-red-100 text-red-800",
+    submitted: "bg-blue-100 text-blue-800",
   };
 
   return (

@@ -80,6 +80,11 @@ function AppInner() {
     enabled: !!session
   });
 
+  useEffect(() => {
+    const enabled = Boolean(me?.user?.dark_mode);
+    document.documentElement.classList.toggle("dark", enabled);
+  }, [me?.user?.dark_mode]);
+
   if (authLoading) return <p>Loading…</p>;
   if (!session) {
     return (

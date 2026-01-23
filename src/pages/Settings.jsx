@@ -177,8 +177,7 @@ export default function Settings({ currentUser, isSuperAdmin }) {
         method: "PATCH",
         body: JSON.stringify({ dark_mode: checked })
       });
-
-      window.location.reload();
+      document.documentElement.classList.toggle("dark", checked);
     } catch (err) {
       console.error(err);
       toast.error("Failed to update preference");

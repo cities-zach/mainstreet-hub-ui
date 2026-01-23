@@ -68,8 +68,8 @@ export default function RequestDetails() {
   }
 
   const isRequester = user && user.email === request.created_by;
-  const isAdmin = user && user.role === "admin";
-  const canUploadMaterials = isAdmin || !isRequester;
+  const isAdmin = user && (user.role === "admin" || user.role === "super_admin");
+  const canUploadMaterials = isAdmin || isRequester;
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 transition-colors duration-300">
