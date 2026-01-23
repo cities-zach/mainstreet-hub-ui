@@ -49,8 +49,8 @@ export default function TaskMaster() {
     return <div className="p-8 text-center">Loading tasks...</div>;
   }
 
-  const isSuperAdmin = user.app_role === "super_admin";
-  const isAdmin = user.app_role === "admin" || user.role === "admin";
+  const isSuperAdmin = user.role === "super_admin";
+  const isAdmin = user.role === "admin" || user.role === "super_admin";
   const canViewAll = isSuperAdmin || isAdmin;
 
   const visibleTasks = tasks

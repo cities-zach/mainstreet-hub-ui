@@ -5,6 +5,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Upload, X, FileText, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import { toast } from "sonner";
+import { uploadPublicFile } from "@/lib/uploads";
 
 const MATERIAL_TYPES = [
   "Facebook Post",
@@ -64,22 +66,29 @@ export default function CommunicationSection({ data, onChange, readOnly }) {
     return material?.due_date || "";
   };
 
-  // UI-only placeholder upload (no API wiring yet)
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     setUploadingFiles(true);
 
-    const newFiles = files.map((file) => ({
-      file_name: file.name,
-      file_url: URL.createObjectURL(file),
-    }));
+    try {
+      const uploaded = await Promise.all(
+        files.map((file) =>
+          uploadPublicFile({
+            pathPrefix: "masterplanner/marketing-files",
+            file,
+          })
+        )
+      );
 
-    handleChange("marketing_files", [...uploadedFiles, ...newFiles]);
-
-    setUploadingFiles(false);
-    e.target.value = "";
+      handleChange("marketing_files", [...uploadedFiles, ...uploaded]);
+    } catch (error) {
+      toast.error(error?.message || "Failed to upload files");
+    } finally {
+      setUploadingFiles(false);
+      e.target.value = "";
+    }
   };
 
   const removeFile = (index) => {

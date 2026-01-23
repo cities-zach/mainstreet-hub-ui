@@ -2,6 +2,9 @@
 
 import { supabase } from "@/lib/supabaseClient";
 
+const API_BASE =
+  (import.meta.env?.VITE_API_URL || "").replace(/\/$/, "") || "/api";
+
 export async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
 
@@ -24,7 +27,7 @@ export async function apiFetch(path, options = {}) {
   }
   headers.set("x-org-slug", "ottumwa");
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers
   });

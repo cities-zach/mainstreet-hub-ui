@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Send, Loader2, Upload, X, FileText } from "lucide-react";
+import { toast } from "sonner";
+import { uploadPublicFile } from "@/lib/uploads";
 
 const MATERIAL_TYPES = [
   "Facebook Post",
@@ -63,25 +65,32 @@ export default function CreateRequest() {
       .catch(() => {});
   }, []);
 
-  // UI-only file handling (no backend upload yet)
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files);
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
     setUploadingFiles(true);
 
-    const newFiles = files.map(file => ({
-      file_name: file.name,
-      file_url: URL.createObjectURL(file)
-    }));
+    try {
+      const uploaded = await Promise.all(
+        files.map((file) =>
+          uploadPublicFile({
+            pathPrefix: "marketing-requests",
+            file,
+          })
+        )
+      );
 
-    setFormData(prev => ({
-      ...prev,
-      uploaded_files: [...prev.uploaded_files, ...newFiles]
-    }));
-
-    setUploadingFiles(false);
-    e.target.value = "";
+      setFormData((prev) => ({
+        ...prev,
+        uploaded_files: [...prev.uploaded_files, ...uploaded],
+      }));
+    } catch (error) {
+      toast.error(error?.message || "Failed to upload files");
+    } finally {
+      setUploadingFiles(false);
+      e.target.value = "";
+    }
   };
 
   const removeFile = (index) => {

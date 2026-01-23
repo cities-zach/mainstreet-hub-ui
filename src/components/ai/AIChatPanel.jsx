@@ -135,14 +135,6 @@ export default function AIChatPanel({ isOpen, onClose }) {
           >
             <Minus className="w-4 h-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-slate-500"
-            onClick={onClose}
-          >
-            <X className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 

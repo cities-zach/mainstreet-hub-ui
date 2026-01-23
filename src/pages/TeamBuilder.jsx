@@ -275,6 +275,17 @@ export default function TeamBuilder() {
 
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {groupedJobs[group].map((job) => {
+                    const assignmentsForJob = getAssignmentsForJob(job.id);
+                    const acceptedCount = assignmentsForJob.filter(
+                      (assignment) => assignment.status === "accepted"
+                    ).length;
+                    const filledCount =
+                      Number.isFinite(Number(job.count_filled)) &&
+                      Number(job.count_filled) >= 0
+                        ? Number(job.count_filled)
+                        : acceptedCount;
+                    const neededCount = Number(job.count_needed) || 0;
+                    const remainingCount = Math.max(neededCount - filledCount, 0);
                     const userAssignment =
                       getUserAssignment(job.id);
                     const isSignedUp =
@@ -282,7 +293,9 @@ export default function TeamBuilder() {
                     const isInvited =
                       userAssignment?.status === "invited";
                     const isFull =
-                      job.count_filled >= job.count_needed;
+                      neededCount > 0
+                        ? filledCount >= neededCount
+                        : job.count_filled >= job.count_needed;
 
                     return (
                       <Card key={job.id} className="flex flex-col">
@@ -305,6 +318,14 @@ export default function TeamBuilder() {
                             <Clock className="inline w-4 h-4 mr-1" />
                             {job.schedule || "TBD"}
                           </div>
+                          {neededCount > 0 && (
+                            <div className="text-sm">
+                              <Users className="inline w-4 h-4 mr-1" />
+                              {filledCount === 0
+                                ? `${neededCount} slots available`
+                                : `${remainingCount}/${neededCount} slots available`}
+                            </div>
+                          )}
                           <div className="text-sm">
                             <MapPin className="inline w-4 h-4 mr-1" />
                             {job.location || "TBD"}

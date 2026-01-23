@@ -11,9 +11,19 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { uploadPublicFile } from "@/lib/uploads";
 
 function normalizeQuestionType(t) {
-  return (t ?? "").toString().trim().toLowerCase();
+  const normalized = (t ?? "").toString().trim().toLowerCase();
+  if (normalized === "text") return "short_text";
+  return normalized;
 }
 
 function normalizeOptions(raw) {
@@ -39,6 +49,7 @@ export default function PublicSurvey() {
 
   const [responses, setResponses] = useState({});
   const [respondentInfo, setRespondentInfo] = useState({ name: "", email: "" });
+  const [uploadingById, setUploadingById] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
   const { data, isLoading } = useQuery({
@@ -74,6 +85,45 @@ export default function PublicSurvey() {
       toast.success("Thank you for your feedback!");
     }
   });
+
+  const handleFileUpload = async (question, fileList) => {
+    const maxFiles = Number(question.max_files) || 1;
+    const files = Array.from(fileList || []).slice(0, maxFiles);
+    if (!files.length) return;
+
+    setUploadingById((prev) => ({ ...prev, [question.id]: true }));
+
+    try {
+      const uploaded = await Promise.all(
+        files.map((file) =>
+          uploadPublicFile({
+            pathPrefix: `surveys/${surveyId}/${question.id}`,
+            file,
+          })
+        )
+      );
+
+      setResponses((prev) => ({
+        ...prev,
+        [question.id]: maxFiles === 1 ? uploaded[0] : uploaded,
+      }));
+    } catch (error) {
+      toast.error(error?.message || "Failed to upload file");
+    } finally {
+      setUploadingById((prev) => ({ ...prev, [question.id]: false }));
+    }
+  };
+
+  const removeUploadedFile = (questionId, index) => {
+    setResponses((prev) => {
+      const current = prev[questionId];
+      if (Array.isArray(current)) {
+        const next = current.filter((_, i) => i !== index);
+        return { ...prev, [questionId]: next };
+      }
+      return { ...prev, [questionId]: null };
+    });
+  };
 
   const missingRequired = useMemo(() => {
     return questions.filter((q) => q.required && (responses[q.id] == null || responses[q.id] === "" || (Array.isArray(responses[q.id]) && responses[q.id].length === 0)));
@@ -172,6 +222,10 @@ export default function PublicSurvey() {
     qType === "yes_no" && opts.length === 0
       ? [{ label: "Yes", value: "Yes" }, { label: "No", value: "No" }]
       : opts;
+  const maxFiles = Number(q.max_files) || 1;
+  const accept = q.accept || undefined;
+  const currentUploads = responses[q.id];
+  const isUploading = uploadingById[q.id];
 
   return (
     <Card key={q.id} className="bg-white/80 backdrop-blur-sm border-slate-200">
@@ -261,6 +315,32 @@ export default function PublicSurvey() {
           </>
         )}
 
+        {effectiveType === "dropdown" && (
+          <>
+            {effectiveOptions.length === 0 ? (
+              <p className="text-sm text-slate-500">No options configured.</p>
+            ) : (
+              <Select
+                value={(responses[q.id] ?? "").toString()}
+                onValueChange={(val) =>
+                  setResponses((prev) => ({ ...prev, [q.id]: val }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an option" />
+                </SelectTrigger>
+                <SelectContent>
+                  {effectiveOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </>
+        )}
+
         {effectiveType === "checkbox" && (
           <>
             {effectiveOptions.length === 0 ? (
@@ -298,6 +378,26 @@ export default function PublicSurvey() {
           />
         )}
 
+        {effectiveType === "number" && (
+          <Input
+            type="number"
+            value={responses[q.id] ?? ""}
+            onChange={(e) =>
+              setResponses((prev) => ({ ...prev, [q.id]: e.target.value }))
+            }
+          />
+        )}
+
+        {effectiveType === "date" && (
+          <Input
+            type="date"
+            value={responses[q.id] ?? ""}
+            onChange={(e) =>
+              setResponses((prev) => ({ ...prev, [q.id]: e.target.value }))
+            }
+          />
+        )}
+
         {effectiveType === "long_text" && (
           <Textarea
             value={responses[q.id] ?? ""}
@@ -308,7 +408,59 @@ export default function PublicSurvey() {
           />
         )}
 
-        {!["scale","multiple_choice","checkbox","short_text","long_text","email"].includes(effectiveType) && (
+        {effectiveType === "file_upload" && (
+          <div className="space-y-2">
+            <Input
+              type="file"
+              accept={accept}
+              multiple={maxFiles > 1}
+              disabled={isUploading}
+              onChange={(e) => {
+                handleFileUpload(q, e.target.files);
+                e.target.value = "";
+              }}
+            />
+            {isUploading && (
+              <p className="text-xs text-slate-500">Uploading...</p>
+            )}
+            {currentUploads && (
+              <div className="space-y-1 text-sm">
+                {(Array.isArray(currentUploads) ? currentUploads : [currentUploads]).map(
+                  (file, fileIndex) => (
+                    <div
+                      key={`${q.id}-${fileIndex}`}
+                      className="flex items-center justify-between rounded border border-slate-200 px-2 py-1"
+                    >
+                      <span className="truncate">
+                        {file?.file_name || "Uploaded file"}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-slate-500 hover:text-slate-700"
+                        onClick={() => removeUploadedFile(q.id, fileIndex)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {![
+          "scale",
+          "multiple_choice",
+          "checkbox",
+          "dropdown",
+          "short_text",
+          "long_text",
+          "email",
+          "number",
+          "date",
+          "file_upload",
+        ].includes(effectiveType) && (
           <p className="text-sm text-slate-500">
             Unsupported question type: <code>{q.question_type}</code>
           </p>
