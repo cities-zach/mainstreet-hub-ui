@@ -71,18 +71,9 @@ export default function InviteAccept() {
         }
       }
 
-      if (!signUpResult.data?.session) {
-        setNotice(
-          "Check your email to confirm your account. Once confirmed, log in and open the invite link again to finish."
-        );
-        return;
-      }
-
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData?.session) {
-        setNotice(
-          "Check your email to confirm your account. Once confirmed, log in and open the invite link again to finish."
-        );
+        setNotice("Please sign in to finish accepting your invite.");
         return;
       }
 
