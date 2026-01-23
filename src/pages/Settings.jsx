@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabaseClient";
 import {
   Save,
   Upload,
@@ -200,6 +201,16 @@ export default function Settings({ currentUser, isSuperAdmin }) {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to sign out");
+    }
+  };
+
   /**
    * SOUND PREVIEW
    */
@@ -243,11 +254,16 @@ export default function Settings({ currentUser, isSuperAdmin }) {
       <div className="max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">System Settings</h1>
-          <p className="text-slate-500">
-            Configure application preferences.
-          </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">System Settings</h1>
+            <p className="text-slate-500">
+              Configure application preferences.
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleSignOut}>
+            Sign Out
+          </Button>
         </div>
 
         {/* Progress */}
