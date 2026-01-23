@@ -7,7 +7,6 @@ import {
   Home,
   LineChart,
   PanelLeft,
-  PanelRight,
   Map,
   Mic,
   BookOpen,
@@ -36,7 +35,9 @@ const navItems = [
 ];
 
 export default function AppShell({ me }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    typeof window !== "undefined" ? window.innerWidth >= 768 : true
+  );
   const [chatOpen, setChatOpen] = useState(true);
 
   const organization = me?.organization;
@@ -50,8 +51,19 @@ export default function AppShell({ me }) {
         : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
     );
 
+  const handleNavClick = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
+
   const navRows = navItems.map((item) => (
-    <NavLink key={item.to} to={item.to} className={navClass}>
+    <NavLink
+      key={item.to}
+      to={item.to}
+      className={navClass}
+      onClick={handleNavClick}
+    >
       <item.icon className="w-4 h-4" />
       {item.label}
     </NavLink>
@@ -59,8 +71,8 @@ export default function AppShell({ me }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <header className="flex items-center justify-between gap-4 px-4 md:px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-4 md:px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur">
+        <div className="flex items-center gap-3 w-full md:w-auto">
           <Button
             variant="ghost"
             size="icon"
@@ -88,7 +100,10 @@ export default function AppShell({ me }) {
           </Link>
         </div>
 
-        <Link to="/" className="flex items-center gap-2 text-[#2d4650]">
+        <Link
+          to="/"
+          className="hidden md:flex items-center gap-2 text-[#2d4650]"
+        >
           <div className="w-9 h-9 rounded-xl bg-[#835879]/15 flex items-center justify-center text-[#835879] font-bold">
             MS
           </div>
@@ -98,11 +113,11 @@ export default function AppShell({ me }) {
           </div>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
           <Button
             variant={chatOpen ? "ghost" : "default"}
             className={cn(
-              "gap-2",
+              "gap-2 w-full sm:w-auto",
               chatOpen ? "text-slate-600" : "bg-[#835879] text-white"
             )}
             onClick={() => setChatOpen((prev) => !prev)}
@@ -110,28 +125,31 @@ export default function AppShell({ me }) {
             <Bot className="w-4 h-4" />
             {chatOpen ? "Hide FRED" : "Open FRED"}
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="w-full sm:w-auto">
             <Link to="/settings">
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Link>
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-slate-600"
-            onClick={() => setChatOpen((prev) => !prev)}
-          >
-            <PanelRight className="w-5 h-5" />
-          </Button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
+        {sidebarOpen && (
+          <button
+            type="button"
+            className="fixed inset-0 z-30 bg-black/30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation"
+          />
+        )}
         <aside
           className={cn(
-            "border-r border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur transition-all duration-300",
-            sidebarOpen ? "w-64" : "w-0"
+            "border-r border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur transition-transform duration-300 md:transition-all",
+            "fixed inset-y-0 left-0 z-40 w-64 md:static md:translate-x-0",
+            sidebarOpen
+              ? "translate-x-0 md:w-64"
+              : "-translate-x-full md:translate-x-0 md:w-0 md:opacity-0 md:pointer-events-none"
           )}
         >
           {sidebarOpen && (
@@ -152,7 +170,7 @@ export default function AppShell({ me }) {
         </main>
 
         {chatOpen && (
-          <div className="fixed bottom-4 right-4 z-50">
+          <div className="fixed bottom-4 right-2 left-2 sm:left-auto sm:right-4 z-50">
             <AIChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
           </div>
         )}
