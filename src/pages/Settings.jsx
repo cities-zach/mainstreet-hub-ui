@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { uploadPublicFile } from "@/lib/uploads";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Save,
@@ -32,6 +33,7 @@ export default function Settings({ currentUser, isSuperAdmin }) {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
   const [uploading, setUploading] = useState({ task: false, level: false });
+  const [logoUploading, setLogoUploading] = useState(false);
   const [orgData, setOrgData] = useState({
     name: "",
     email: "",
@@ -197,6 +199,34 @@ export default function Settings({ currentUser, isSuperAdmin }) {
       toast.error("Failed to save organization settings");
     } finally {
       setOrgSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
+      event.target.value = "";
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      const uploaded = await uploadPublicFile({
+        pathPrefix: "org-logos",
+        file,
+      });
+
+      setOrgData((prev) => ({ ...prev, logo_url: uploaded.file_url || "" }));
+      toast.success("Logo uploaded");
+    } catch (err) {
+      console.error(err);
+      toast.error("Logo upload failed");
+    } finally {
+      setLogoUploading(false);
+      event.target.value = "";
     }
   };
 
@@ -425,14 +455,33 @@ export default function Settings({ currentUser, isSuperAdmin }) {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label>Logo URL</Label>
+              <div className="space-y-2">
+                <Label>Logo Upload</Label>
                 <Input
-                  value={orgData.logo_url}
-                  onChange={(e) =>
-                    setOrgData({ ...orgData, logo_url: e.target.value })
-                  }
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  disabled={logoUploading}
                 />
+                {logoUploading && (
+                  <p className="text-xs text-slate-500">Uploading...</p>
+                )}
+                {orgData.logo_url && (
+                  <img
+                    src={orgData.logo_url}
+                    alt="Organization logo"
+                    className="h-16 w-16 rounded-full object-cover border border-slate-200"
+                  />
+                )}
+                <div>
+                  <Label className="text-xs text-slate-500">Logo URL (optional)</Label>
+                  <Input
+                    value={orgData.logo_url}
+                    onChange={(e) =>
+                      setOrgData({ ...orgData, logo_url: e.target.value })
+                    }
+                  />
+                </div>
               </div>
               <div>
                 <Label>Primary Color</Label>
