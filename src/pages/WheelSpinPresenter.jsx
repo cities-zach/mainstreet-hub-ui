@@ -20,8 +20,10 @@ export default function WheelSpinPresenter({ me }) {
 
   const [rotation, setRotation] = useState(0);
   const [winners, setWinners] = useState([]);
+  const [pendingWinner, setPendingWinner] = useState(null);
   const [excludeIds, setExcludeIds] = useState([]);
   const [isSpinning, setIsSpinning] = useState(false);
+  const spinDurationMs = 6000;
 
   const { data: wheelDetail } = useQuery({
     queryKey: ["wheelspin", id],
@@ -49,9 +51,30 @@ export default function WheelSpinPresenter({ me }) {
     [entries, excludeIds, removeWinnerOnSpin]
   );
 
+  const wedges = useMemo(() => {
+    const total =
+      visibleEntries.reduce(
+        (sum, entry) => sum + (Number(entry.weight) || 1),
+        0
+      ) || 1;
+    let current = 0;
+    return visibleEntries.map((entry) => {
+      const weight = Number(entry.weight) || 1;
+      const slice = (weight / total) * 360;
+      const startAngle = current;
+      const endAngle = startAngle + slice;
+      current = endAngle;
+      return {
+        ...entry,
+        midAngle: (startAngle + endAngle) / 2
+      };
+    });
+  }, [visibleEntries]);
+
   useEffect(() => {
     setWinners([]);
     setExcludeIds([]);
+    setPendingWinner(null);
   }, [id]);
 
   const spinWheel = useMutation({
@@ -70,17 +93,31 @@ export default function WheelSpinPresenter({ me }) {
   const handleSpin = async () => {
     if (!canSpin) return;
     setIsSpinning(true);
-    setRotation((prev) => prev + 360 * 6 + Math.random() * 360);
     try {
       const result = await spinWheel.mutateAsync();
       if (result?.winner) {
-        setWinners((prev) => [...prev, result.winner]);
-        if (removeWinnerOnSpin && result.winner.id) {
-          setExcludeIds((prev) => [...prev, result.winner.id]);
-        }
+        const winner = result.winner;
+        const wedge = wedges.find((item) => item.id === winner.id);
+        const targetAngle = wedge ? (360 - wedge.midAngle) % 360 : Math.random() * 360;
+        setRotation((prev) => {
+          const normalized = ((prev % 360) + 360) % 360;
+          const delta = (targetAngle - normalized + 360) % 360;
+          return prev + 360 * 6 + delta;
+        });
+        setPendingWinner(winner);
+        setTimeout(() => {
+          setWinners((prev) => [...prev, winner]);
+          setPendingWinner(null);
+          if (removeWinnerOnSpin && winner.id) {
+            setExcludeIds((prev) => [...prev, winner.id]);
+          }
+          setIsSpinning(false);
+        }, spinDurationMs);
+        return;
       }
-    } finally {
-      setTimeout(() => setIsSpinning(false), 6200);
+      setIsSpinning(false);
+    } catch (error) {
+      setIsSpinning(false);
     }
   };
 
@@ -108,7 +145,7 @@ export default function WheelSpinPresenter({ me }) {
           entries={visibleEntries}
           rotation={rotation}
           primaryColor={primaryColor}
-          durationMs={6000}
+          durationMs={spinDurationMs}
           className="scale-105"
         />
 
@@ -122,8 +159,13 @@ export default function WheelSpinPresenter({ me }) {
             <Shuffle className="mr-2 h-5 w-5" />
             {isSpinning ? "Spinning..." : "Start Spin"}
           </Button>
-          {winners.length > 0 && (
+          {(winners.length > 0 || pendingWinner) && (
             <div className="mt-2 grid gap-2 text-center">
+              {pendingWinner && (
+                <div className="rounded-full bg-white/10 px-4 py-2 text-lg font-semibold">
+                  Revealing winner...
+                </div>
+              )}
               {winners.map((winner, idx) => (
                 <div
                   key={`${winner.id || winner.label}-${idx}`}

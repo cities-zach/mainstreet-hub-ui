@@ -89,7 +89,8 @@ export default function WheelCanvas({
         ...entry,
         startAngle,
         endAngle,
-        midAngle: (startAngle + endAngle) / 2
+        midAngle: (startAngle + endAngle) / 2,
+        slice
       };
     });
     return {
@@ -124,23 +125,41 @@ export default function WheelCanvas({
                 stroke="rgba(255,255,255,0.8)"
                 strokeWidth="2"
               />
-              <g
-                transform={`rotate(${wedge.midAngle + 90} 200 200) translate(200 200)`}
-              >
+              {(() => {
+                const baseRotation = wedge.midAngle + 90;
+                const normalized =
+                  ((baseRotation % 360) + 360) % 360;
+                const shouldFlip = normalized > 90 && normalized < 270;
+                const rotation = shouldFlip ? baseRotation + 180 : baseRotation;
+                const angleSize = wedge.slice || 0;
+                const fontSize =
+                  angleSize < 4 ? 6 : angleSize < 8 ? 7 : angleSize < 12 ? 9 : angleSize < 18 ? 10 : 12;
+                const radius =
+                  angleSize < 6 ? 90 : angleSize < 12 ? 105 : 120;
+                const textLength =
+                  angleSize < 6 ? 70 : angleSize < 12 ? 90 : 130;
+                return (
+                  <g
+                    transform={`rotate(${rotation} 200 200) translate(200 200)`}
+                  >
                 <text
                   x="0"
-                  y="-120"
+                  y={-radius}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   className="fill-slate-900"
                   style={{
-                    fontSize: wedges.length > 40 ? 8 : wedges.length > 20 ? 10 : 12,
+                    fontSize,
                     fontWeight: 600
                   }}
+                  textLength={textLength}
+                  lengthAdjust="spacingAndGlyphs"
                 >
                   {wedge.label}
                 </text>
-              </g>
+                  </g>
+                );
+              })()}
             </g>
           ))}
           <circle cx="200" cy="200" r="70" fill="rgba(255,255,255,0.7)" />
