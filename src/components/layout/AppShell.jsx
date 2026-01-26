@@ -15,26 +15,34 @@ import {
   Store,
   Users,
   CheckSquare,
+  Sparkles,
 } from "lucide-react";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { label: "Home", to: "/", icon: Home },
-  { label: "MasterPlanner", to: "/master-planner", icon: Map },
-  { label: "NoteTaker", to: "/meeting-notes", icon: Mic },
-  { label: "MarketStreet", to: "/marketstreet", icon: Store },
-  { label: "TaskMaster", to: "/taskmaster", icon: CheckSquare },
-  { label: "PocketBook", to: "/pocketbook", icon: DollarSign },
-  { label: "SupplyStop", to: "/supplystop", icon: Package },
-  { label: "TeamBuilder", to: "/teambuilder", icon: Users },
-  { label: "FeedBack", to: "/feedback", icon: ClipboardList },
-  { label: "InvestorTrack", to: "/investors", icon: LineChart },
-  { label: "RAGTime", to: "/ragtime", icon: BookOpen },
-];
-
 export default function AppShell({ me }) {
+  const isAdmin =
+    me?.user?.role === "admin" ||
+    me?.user?.role === "super_admin" ||
+    me?.user?.app_role === "admin" ||
+    me?.user?.app_role === "super_admin";
+  const navItems = [
+    { label: "Home", to: "/", icon: Home },
+    { label: "MasterPlanner", to: "/master-planner", icon: Map },
+    { label: "NoteTaker", to: "/meeting-notes", icon: Mic },
+    { label: "MarketStreet", to: "/marketstreet", icon: Store },
+    { label: "TaskMaster", to: "/taskmaster", icon: CheckSquare },
+    { label: "PocketBook", to: "/pocketbook", icon: DollarSign },
+    { label: "SupplyStop", to: "/supplystop", icon: Package },
+    { label: "TeamBuilder", to: "/teambuilder", icon: Users },
+    { label: "FeedBack", to: "/feedback", icon: ClipboardList },
+    { label: "InvestorTrack", to: "/investors", icon: LineChart },
+    ...(isAdmin
+      ? [{ label: "WheelSpin", to: "/wheelspin", icon: Sparkles }]
+      : []),
+    { label: "RAGTime", to: "/ragtime", icon: BookOpen },
+  ];
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );

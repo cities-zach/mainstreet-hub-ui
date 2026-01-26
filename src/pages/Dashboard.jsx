@@ -12,6 +12,7 @@ import {
   LineChart,
   Mic,
   BookOpen,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import ThreeMonthCalendar from "@/components/dashboard/ThreeMonthCalendar";
@@ -40,7 +41,12 @@ const ModuleCard = ({ title, description, icon: Icon, url, color }) => (
   </Link>
 );
 
-export default function Dashboard() {
+export default function Dashboard({ me }) {
+  const isAdmin =
+    me?.user?.role === "admin" ||
+    me?.user?.role === "super_admin" ||
+    me?.user?.app_role === "admin" ||
+    me?.user?.app_role === "super_admin";
   const { data: events = [] } = useQuery({
     queryKey: ["events"],
     queryFn: () => apiFetch("/events"),
@@ -103,6 +109,17 @@ export default function Dashboard() {
       url: "/investors",
       color: "#6366f1",
     },
+    ...(isAdmin
+      ? [
+          {
+            title: "WheelSpin",
+            description: "Run weighted prize wheels and track winners.",
+            icon: Sparkles,
+            url: "/wheelspin",
+            color: "#835879",
+          },
+        ]
+      : []),
     {
       title: "NoteTaker",
       description: "Upload meetings, review notes, and create tasks.",
