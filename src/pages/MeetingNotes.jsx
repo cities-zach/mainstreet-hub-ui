@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileAudio, Mic, NotebookPen, Sparkles } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  FileAudio,
+  Mic,
+  NotebookPen,
+  Search,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { apiFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +17,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const fileToBase64 = (file) =>
   new Promise((resolve, reject) => {
@@ -29,10 +51,23 @@ export default function MeetingNotes() {
   const [noteSummary, setNoteSummary] = useState("");
   const [decisions, setDecisions] = useState([]);
   const [taskSuggestions, setTaskSuggestions] = useState([]);
+  const [meetingSearch, setMeetingSearch] = useState("");
+  const [runTranscript, setRunTranscript] = useState(true);
+  const [runSummary, setRunSummary] = useState(true);
+  const [runError, setRunError] = useState("");
+  const [openAssigneeIndex, setOpenAssigneeIndex] = useState(null);
 
   const { data: meetings = [] } = useQuery({
-    queryKey: ["ai-meetings"],
-    queryFn: () => apiFetch("/ai/meetings"),
+    queryKey: ["ai-meetings", meetingSearch],
+    queryFn: () =>
+      apiFetch(
+        `/ai/meetings${meetingSearch ? `?search=${encodeURIComponent(meetingSearch)}` : ""}`
+      ),
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiFetch("/users"),
   });
 
   const selectedMeeting = useMemo(
@@ -46,55 +81,58 @@ export default function MeetingNotes() {
     }
   }, [meetings, selectedMeetingId]);
 
-  const createMeeting = useMutation({
-    mutationFn: () =>
-      apiFetch("/ai/meetings", {
+  const runMeeting = useMutation({
+    mutationFn: async () => {
+      if (!title.trim()) throw new Error("Meeting title is required.");
+      if (!audioFile) throw new Error("Please upload an audio file.");
+      if (!runTranscript && !runSummary) {
+        throw new Error("Select transcript, summary, or both.");
+      }
+      if (runSummary && !runTranscript) {
+        throw new Error("Summary requires transcript.");
+      }
+
+      const created = await apiFetch("/ai/meetings", {
         method: "POST",
         body: JSON.stringify({ title }),
-      }),
-    onSuccess: (created) => {
+      });
+
+      setSelectedMeetingId(created.id);
+
+      if (runTranscript) {
+        const audio_base64 = await fileToBase64(audioFile);
+        await apiFetch(`/ai/meetings/${created.id}/transcribe`, {
+          method: "POST",
+          body: JSON.stringify({
+            audio_base64,
+            file_name: audioFile.name,
+            mime_type: audioFile.type,
+          }),
+        });
+      }
+
+      if (runSummary) {
+        const note = await apiFetch(`/ai/meetings/${created.id}/summarize`, {
+          method: "POST",
+        });
+        setNoteSummary(note.summary || "");
+        setDecisions(note.decisions || []);
+        setTaskSuggestions(
+          (note.task_suggestions || []).map((task) => ({
+            ...task,
+            selected: true,
+          }))
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
       setTitle("");
-      setSelectedMeetingId(created.id);
+      setAudioFile(null);
+      setRunError("");
+      return created;
     },
-  });
-
-  const transcribeMeeting = useMutation({
-    mutationFn: async () => {
-      if (!selectedMeetingId || !audioFile) return null;
-      const audio_base64 = await fileToBase64(audioFile);
-      return apiFetch(`/ai/meetings/${selectedMeetingId}/transcribe`, {
-        method: "POST",
-        body: JSON.stringify({
-          audio_base64,
-          file_name: audioFile.name,
-          mime_type: audioFile.type,
-        }),
-      });
-    },
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
-      if (selectedMeetingId) {
-        await summarizeMeeting.mutateAsync();
-      }
-    },
-  });
-
-  const summarizeMeeting = useMutation({
-    mutationFn: async () =>
-      apiFetch(`/ai/meetings/${selectedMeetingId}/summarize`, {
-        method: "POST",
-      }),
-    onSuccess: (note) => {
-      setNoteSummary(note.summary || "");
-      setDecisions(note.decisions || []);
-      setTaskSuggestions(
-        (note.task_suggestions || []).map((task) => ({
-          ...task,
-          selected: true,
-        }))
-      );
-      queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
+    onError: (err) => {
+      setRunError(err?.message || "Unable to run meeting.");
     },
   });
 
@@ -113,6 +151,15 @@ export default function MeetingNotes() {
             })),
         }),
       }),
+  });
+
+  const deleteMeeting = useMutation({
+    mutationFn: async (meetingId) =>
+      apiFetch(`/ai/meetings/${meetingId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
+      setSelectedMeetingId(null);
+    },
   });
 
   useEffect(() => {
@@ -160,7 +207,7 @@ export default function MeetingNotes() {
         <div className="grid lg:grid-cols-[1.2fr_1fr] gap-6">
           <Card className="bg-white/80 dark:bg-slate-900/80">
             <CardHeader>
-              <CardTitle>Create a meeting</CardTitle>
+              <CardTitle>Run a meeting</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -171,15 +218,7 @@ export default function MeetingNotes() {
                   placeholder="Downtown Steering Committee"
                 />
               </div>
-              <Button
-                className="bg-[#835879] text-white"
-                onClick={() => createMeeting.mutate()}
-                disabled={createMeeting.isPending || !title.trim()}
-              >
-                Create Meeting
-              </Button>
-
-              <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
                 <Label className="flex items-center gap-2">
                   <FileAudio className="w-4 h-4" />
                   Upload audio
@@ -189,36 +228,51 @@ export default function MeetingNotes() {
                   accept="audio/*"
                   onChange={(event) => setAudioFile(event.target.files?.[0] || null)}
                 />
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => transcribeMeeting.mutate()}
-                    disabled={!selectedMeetingId || !audioFile}
-                  >
-                    Transcribe
-                  </Button>
-                  <Button
-                    className="bg-[#2d4650] text-white"
-                    onClick={() => summarizeMeeting.mutate()}
-                    disabled={!selectedMeetingId || !selectedMeeting?.transcript}
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Summarize
-                  </Button>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Transcript status:{" "}
-                  <span className="font-semibold">
-                    {selectedMeeting?.transcript_status || "pending"}
-                  </span>
-                </p>
               </div>
+              <div className="space-y-2">
+                <Label>Generate</Label>
+                <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={runTranscript}
+                      onChange={(event) => setRunTranscript(event.target.checked)}
+                    />
+                    Transcript
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={runSummary}
+                      onChange={(event) => setRunSummary(event.target.checked)}
+                    />
+                    Summary
+                  </label>
+                </div>
+              </div>
+              {runError && <p className="text-sm text-rose-500">{runError}</p>}
+              <Button
+                className="bg-[#835879] text-white"
+                onClick={() => runMeeting.mutate()}
+                disabled={runMeeting.isPending}
+              >
+                {runMeeting.isPending ? "Running..." : "Run Meeting"}
+              </Button>
             </CardContent>
           </Card>
 
           <Card className="bg-white/80 dark:bg-slate-900/80">
-            <CardHeader>
+            <CardHeader className="space-y-3">
               <CardTitle>Meeting library</CardTitle>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search meetings..."
+                  value={meetingSearch}
+                  onChange={(event) => setMeetingSearch(event.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {meetings.length === 0 && (
@@ -227,23 +281,39 @@ export default function MeetingNotes() {
                 </p>
               )}
               {meetings.map((meeting) => (
-                <button
+                <div
                   key={meeting.id}
                   className={cn(
-                    "w-full text-left px-3 py-3 rounded-xl border transition-colors",
+                    "w-full px-3 py-3 rounded-xl border transition-colors flex items-center justify-between gap-3",
                     meeting.id === selectedMeetingId
                       ? "border-[#835879] bg-[#835879]/10 text-[#835879]"
                       : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
                   )}
-                  onClick={() => setSelectedMeetingId(meeting.id)}
                 >
-                  <div className="font-semibold">{meeting.title || "Untitled"}</div>
-                  <div className="text-xs text-slate-500">
-                    {meeting.summary_status === "completed"
-                      ? "Summary ready"
-                      : "Summary pending"}
-                  </div>
-                </button>
+                  <button
+                    className="flex-1 text-left"
+                    onClick={() => setSelectedMeetingId(meeting.id)}
+                  >
+                    <div className="font-semibold">{meeting.title || "Untitled"}</div>
+                    <div className="text-xs text-slate-500">
+                      {meeting.summary_status === "completed"
+                        ? "Summary ready"
+                        : "Summary pending"}
+                    </div>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-400 hover:text-rose-500"
+                    onClick={() => {
+                      if (window.confirm("Delete this meeting? This cannot be undone.")) {
+                        deleteMeeting.mutate(meeting.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               ))}
             </CardContent>
           </Card>
@@ -292,27 +362,116 @@ export default function MeetingNotes() {
                 {taskSuggestions.map((task, index) => (
                   <label
                     key={`${task.title}-${index}`}
-                    className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm"
+                    className="flex flex-col gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm"
                   >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={task.selected}
-                      onChange={(event) => {
-                        setTaskSuggestions((prev) =>
-                          prev.map((item, idx) =>
-                            idx === index
-                              ? { ...item, selected: event.target.checked }
-                              : item
-                          )
-                        );
-                      }}
-                    />
-                    <div>
-                      <div className="font-semibold">{task.title || "Untitled"}</div>
-                      {task.description && (
-                        <div className="text-slate-500">{task.description}</div>
-                      )}
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={task.selected}
+                        onChange={(event) => {
+                          setTaskSuggestions((prev) =>
+                            prev.map((item, idx) =>
+                              idx === index
+                                ? { ...item, selected: event.target.checked }
+                                : item
+                            )
+                          );
+                        }}
+                      />
+                      <div>
+                        <div className="font-semibold">{task.title || "Untitled"}</div>
+                        {task.description && (
+                          <div className="text-slate-500">{task.description}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Label className="text-xs text-slate-500">Assign to</Label>
+                      <Popover
+                        open={openAssigneeIndex === index}
+                        onOpenChange={(open) =>
+                          setOpenAssigneeIndex(open ? index : null)
+                        }
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openAssigneeIndex === index}
+                            className="w-full justify-between truncate sm:w-64"
+                          >
+                            {task.assigned_to_id
+                              ? (() => {
+                                  const user = users.find(
+                                    (u) => u.id === task.assigned_to_id
+                                  );
+                                  return user
+                                    ? `${user.full_name || ""} (${user.email})`.trim()
+                                    : "Select user...";
+                                })()
+                              : "Unassigned"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                          <Command>
+                            <CommandInput placeholder="Search user..." />
+                            <CommandList>
+                              <CommandEmpty>No user found.</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="unassigned"
+                                  onSelect={() => {
+                                    setTaskSuggestions((prev) =>
+                                      prev.map((item, idx) =>
+                                        idx === index
+                                          ? { ...item, assigned_to_id: "" }
+                                          : item
+                                      )
+                                    );
+                                    setOpenAssigneeIndex(null);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      !task.assigned_to_id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  Unassigned
+                                </CommandItem>
+                                {users.map((user) => (
+                                  <CommandItem
+                                    key={user.id}
+                                    value={`${user.full_name || ""} ${user.email}`.trim()}
+                                    onSelect={() => {
+                                      setTaskSuggestions((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === index
+                                            ? { ...item, assigned_to_id: user.id }
+                                            : item
+                                        )
+                                      );
+                                      setOpenAssigneeIndex(null);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        task.assigned_to_id === user.id
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    {`${user.full_name || ""} (${user.email})`.trim()}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </label>
                 ))}
