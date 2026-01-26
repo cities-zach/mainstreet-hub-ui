@@ -43,6 +43,14 @@ const fileToBase64 = (file) =>
     reader.readAsDataURL(file);
   });
 
+const fileToText = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result?.toString() || "");
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+
 export default function MeetingNotes() {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
@@ -56,6 +64,10 @@ export default function MeetingNotes() {
   const [runSummary, setRunSummary] = useState(true);
   const [runError, setRunError] = useState("");
   const [openAssigneeIndex, setOpenAssigneeIndex] = useState(null);
+  const [agendaText, setAgendaText] = useState("");
+  const [agendaFileName, setAgendaFileName] = useState("");
+  const [transcriptText, setTranscriptText] = useState("");
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const { data: meetings = [] } = useQuery({
     queryKey: ["ai-meetings", meetingSearch],
@@ -101,7 +113,7 @@ export default function MeetingNotes() {
 
       if (runTranscript) {
         const audio_base64 = await fileToBase64(audioFile);
-        await apiFetch(`/ai/meetings/${created.id}/transcribe`, {
+        const transcribed = await apiFetch(`/ai/meetings/${created.id}/transcribe`, {
           method: "POST",
           body: JSON.stringify({
             audio_base64,
@@ -109,11 +121,13 @@ export default function MeetingNotes() {
             mime_type: audioFile.type,
           }),
         });
+        setTranscriptText(transcribed?.transcript || "");
       }
 
       if (runSummary) {
         const note = await apiFetch(`/ai/meetings/${created.id}/summarize`, {
           method: "POST",
+          body: JSON.stringify({ agenda: agendaText }),
         });
         setNoteSummary(note.summary || "");
         setDecisions(note.decisions || []);
@@ -128,6 +142,8 @@ export default function MeetingNotes() {
       queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
       setTitle("");
       setAudioFile(null);
+      setAgendaText("");
+      setAgendaFileName("");
       setRunError("");
       return created;
     },
@@ -165,10 +181,12 @@ export default function MeetingNotes() {
   useEffect(() => {
     const fetchNote = async () => {
       if (!selectedMeetingId) return;
+      setShowTranscript(false);
       if (selectedMeeting?.summary_status !== "completed") {
         setNoteSummary("");
         setDecisions([]);
         setTaskSuggestions([]);
+        setTranscriptText(selectedMeeting?.transcript || "");
         return;
       }
       try {
@@ -181,10 +199,12 @@ export default function MeetingNotes() {
             selected: true,
           }))
         );
+        setTranscriptText(selectedMeeting?.transcript || "");
       } catch {
         setNoteSummary("");
         setDecisions([]);
         setTaskSuggestions([]);
+        setTranscriptText(selectedMeeting?.transcript || "");
       }
     };
     fetchNote();
@@ -228,6 +248,37 @@ export default function MeetingNotes() {
                   accept="audio/*"
                   onChange={(event) => setAudioFile(event.target.files?.[0] || null)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>Agenda (optional)</Label>
+                <Textarea
+                  value={agendaText}
+                  onChange={(event) => setAgendaText(event.target.value)}
+                  rows={4}
+                  placeholder="Paste agenda items here..."
+                />
+                <Input
+                  type="file"
+                  accept=".txt,.md,.csv,.json"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const text = await fileToText(file);
+                      setAgendaText(text);
+                      setAgendaFileName(file.name);
+                    } catch {
+                      setRunError("Unable to read agenda file.");
+                    } finally {
+                      event.target.value = "";
+                    }
+                  }}
+                />
+                {agendaFileName && (
+                  <p className="text-xs text-slate-500">
+                    Loaded agenda: {agendaFileName}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Generate</Label>
@@ -327,6 +378,32 @@ export default function MeetingNotes() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="rounded-xl border border-slate-200 bg-white/60 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Transcript</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowTranscript((prev) => !prev)}
+                  disabled={!transcriptText}
+                >
+                  {showTranscript ? "Minimize" : "View"}
+                </Button>
+              </div>
+              {showTranscript && (
+                <Textarea
+                  value={transcriptText}
+                  readOnly
+                  rows={8}
+                  className="mt-3"
+                />
+              )}
+              {!transcriptText && (
+                <p className="text-xs text-slate-500">
+                  No transcript available yet.
+                </p>
+              )}
+            </div>
             <div>
               <Label>Summary</Label>
               <Textarea
