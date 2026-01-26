@@ -101,7 +101,10 @@ export default function WheelCanvas({
 
   return (
     <div className={cn("relative flex items-center justify-center", className)}>
-      <div className="absolute -top-4 z-10 h-0 w-0 border-x-10 border-x-transparent border-b-[18px] border-b-slate-700 dark:border-b-slate-200" />
+      <div className="absolute -top-6 z-10 flex flex-col items-center">
+        <div className="h-6 w-1 rounded-full bg-slate-700 shadow-sm dark:bg-slate-200" />
+        <div className="h-0 w-0 border-x-[14px] border-x-transparent border-b-[22px] border-b-slate-700 drop-shadow dark:border-b-slate-200" />
+      </div>
       <svg
         viewBox="0 0 400 400"
         className="h-80 w-80 rounded-full border-4 border-white bg-white shadow-xl dark:border-slate-800 dark:bg-slate-950"
@@ -122,7 +125,7 @@ export default function WheelCanvas({
                 strokeWidth="2"
               />
               <g
-                transform={`rotate(${wedge.midAngle} 200 200) translate(200 200)`}
+                transform={`rotate(${wedge.midAngle + 90} 200 200) translate(200 200)`}
               >
                 <text
                   x="0"
@@ -131,7 +134,7 @@ export default function WheelCanvas({
                   dominantBaseline="middle"
                   className="fill-slate-900"
                   style={{
-                    fontSize: wedges.length > 20 ? 10 : 12,
+                    fontSize: wedges.length > 40 ? 8 : wedges.length > 20 ? 10 : 12,
                     fontWeight: 600
                   }}
                 >

@@ -41,6 +41,13 @@ export default function WheelSpinPresenter({ me }) {
   );
   const winnersCount = Number(wheel?.winners_count) || 1;
   const removeWinnerOnSpin = wheel?.remove_winner_on_spin ?? true;
+  const visibleEntries = useMemo(
+    () =>
+      removeWinnerOnSpin
+        ? entries.filter((entry) => !excludeIds.includes(entry.id))
+        : entries,
+    [entries, excludeIds, removeWinnerOnSpin]
+  );
 
   useEffect(() => {
     setWinners([]);
@@ -98,7 +105,7 @@ export default function WheelSpinPresenter({ me }) {
         </div>
 
         <WheelCanvas
-          entries={entries}
+          entries={visibleEntries}
           rotation={rotation}
           primaryColor={primaryColor}
           durationMs={6000}
