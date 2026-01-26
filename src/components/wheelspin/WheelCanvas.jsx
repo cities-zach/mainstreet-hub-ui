@@ -126,29 +126,28 @@ export default function WheelCanvas({
                 strokeWidth="2"
               />
               {(() => {
-                const baseRotation = wedge.midAngle + 90;
+                const baseRotation = wedge.midAngle;
                 const normalized = ((baseRotation % 360) + 360) % 360;
                 const shouldFlip = normalized > 90 && normalized < 270;
                 const rotation = shouldFlip ? baseRotation + 180 : baseRotation;
                 const angleSize = wedge.slice || 0;
                 const fontSize =
-                  entries.length > 80
-                    ? 7
-                    : entries.length > 50
-                      ? 8
-                      : angleSize < 8
+                  entries.length > 100
+                    ? 6
+                    : entries.length > 70
+                      ? 7
+                      : entries.length > 40
                         ? 8
-                        : angleSize < 14
-                          ? 10
+                        : angleSize < 10
+                          ? 9
                           : 12;
-                const radius = entries.length > 60 ? 100 : 118;
+                const radius = entries.length > 60 ? 102 : 122;
+                const textX = shouldFlip ? -radius : radius;
                 return (
-                  <g
-                    transform={`rotate(${rotation} 200 200) translate(200 200)`}
-                  >
+                  <g transform={`translate(200 200) rotate(${rotation})`}>
                     <text
-                      x="0"
-                      y={-radius}
+                      x={textX}
+                      y="0"
                       textAnchor="middle"
                       dominantBaseline="middle"
                       className="fill-slate-900"
