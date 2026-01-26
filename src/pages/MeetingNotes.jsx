@@ -72,8 +72,11 @@ export default function MeetingNotes() {
         }),
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
+      if (selectedMeetingId) {
+        await summarizeMeeting.mutateAsync();
+      }
     },
   });
 
@@ -91,6 +94,7 @@ export default function MeetingNotes() {
           selected: true,
         }))
       );
+      queryClient.invalidateQueries({ queryKey: ["ai-meetings"] });
     },
   });
 
@@ -312,10 +316,17 @@ export default function MeetingNotes() {
             <Button
               className="bg-[#835879] text-white"
               onClick={() => approveMeeting.mutate()}
-              disabled={!selectedMeetingId}
+              disabled={
+                !selectedMeetingId || selectedMeeting?.summary_status !== "completed"
+              }
             >
               Approve Notes & Create Tasks
             </Button>
+            {selectedMeeting?.summary_status !== "completed" && (
+              <p className="text-xs text-slate-500">
+                Summarize the meeting before approving notes.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
