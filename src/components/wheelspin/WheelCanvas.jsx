@@ -129,7 +129,6 @@ export default function WheelCanvas({
                 const angle = wedge.midAngle;
                 const normalized = ((angle % 360) + 360) % 360;
                 const shouldFlip = normalized > 90 && normalized < 270;
-                const rotation = shouldFlip ? angle + 180 : angle;
                 const angleSize = wedge.slice || 0;
                 const fontSize =
                   entries.length > 120
@@ -141,8 +140,9 @@ export default function WheelCanvas({
                         : angleSize < 10
                           ? 9
                           : 12;
-                const radius = entries.length > 60 ? 110 : 125;
+                const radius = entries.length > 60 ? 112 : 126;
                 const pos = polarToCartesian(200, 200, radius, angle);
+                const rotation = (angle - 90) + (shouldFlip ? 180 : 0);
                 return (
                   <text
                     x={pos.x}

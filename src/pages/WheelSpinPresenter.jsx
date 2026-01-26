@@ -21,6 +21,7 @@ export default function WheelSpinPresenter({ me }) {
   const [rotation, setRotation] = useState(0);
   const [winners, setWinners] = useState([]);
   const [pendingWinner, setPendingWinner] = useState(null);
+  const [pendingRemovals, setPendingRemovals] = useState([]);
   const [excludeIds, setExcludeIds] = useState([]);
   const [isSpinning, setIsSpinning] = useState(false);
   const spinDurationMs = 6000;
@@ -75,6 +76,7 @@ export default function WheelSpinPresenter({ me }) {
     setWinners([]);
     setExcludeIds([]);
     setPendingWinner(null);
+    setPendingRemovals([]);
   }, [id]);
 
   const spinWheel = useMutation({
@@ -94,10 +96,42 @@ export default function WheelSpinPresenter({ me }) {
     if (!canSpin) return;
     setIsSpinning(true);
     try {
+      const nextExcludeIds = removeWinnerOnSpin
+        ? Array.from(new Set([...excludeIds, ...pendingRemovals]))
+        : [];
+
+      if (removeWinnerOnSpin && pendingRemovals.length) {
+        setExcludeIds(nextExcludeIds);
+        setPendingRemovals([]);
+      }
+
+      const entriesForSpin = removeWinnerOnSpin
+        ? entries.filter((entry) => !nextExcludeIds.includes(entry.id))
+        : entries;
+      const wedgesForSpin = (() => {
+        const total =
+          entriesForSpin.reduce(
+            (sum, entry) => sum + (Number(entry.weight) || 1),
+            0
+          ) || 1;
+        let current = 0;
+        return entriesForSpin.map((entry) => {
+          const weight = Number(entry.weight) || 1;
+          const slice = (weight / total) * 360;
+          const startAngle = current;
+          const endAngle = startAngle + slice;
+          current = endAngle;
+          return {
+            ...entry,
+            midAngle: (startAngle + endAngle) / 2
+          };
+        });
+      })();
+
       const result = await spinWheel.mutateAsync();
       if (result?.winner) {
         const winner = result.winner;
-        const wedge = wedges.find((item) => item.id === winner.id);
+        const wedge = wedgesForSpin.find((item) => item.id === winner.id);
         const targetAngle = wedge ? (360 - wedge.midAngle) % 360 : Math.random() * 360;
         setRotation((prev) => {
           const normalized = ((prev % 360) + 360) % 360;
@@ -109,7 +143,9 @@ export default function WheelSpinPresenter({ me }) {
           setWinners((prev) => [...prev, winner]);
           setPendingWinner(null);
           if (removeWinnerOnSpin && winner.id) {
-            setExcludeIds((prev) => [...prev, winner.id]);
+            setPendingRemovals((prev) =>
+              prev.includes(winner.id) ? prev : [...prev, winner.id]
+            );
           }
           setIsSpinning(false);
         }, spinDurationMs);
