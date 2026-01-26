@@ -4,10 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { apiFetch } from "@/api";
+import { cn } from "@/lib/utils";
 
 export default function TaskForm({ onSuccess, onCancel, currentUser }) {
   const queryClient = useQueryClient();
+  const [assignOpen, setAssignOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -57,6 +69,15 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
     });
   };
 
+  const getUserLabel = (user) => {
+    if (!user) return "Unknown user";
+    const name = user.full_name?.trim();
+    if (name) return `${name} (${user.email})`;
+    return user.email || "Unnamed user";
+  };
+
+  const selectedUser = users.find((u) => u.id === formData.assigned_to_id);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
@@ -85,18 +106,65 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
         </div>
         <div className="space-y-2">
           <Label>Assign To</Label>
-          <select
-            className="w-full border rounded px-2 py-2 text-sm"
-            value={formData.assigned_to_id}
-            onChange={(e) => setFormData({ ...formData, assigned_to_id: e.target.value })}
-          >
-            <option value="">Unassigned</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.email}
-              </option>
-            ))}
-          </select>
+          <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between"
+              >
+                {formData.assigned_to_id
+                  ? getUserLabel(selectedUser)
+                  : "Unassigned"}
+                <ChevronsUpDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0">
+              <Command>
+                <CommandInput placeholder="Search users..." />
+                <CommandList>
+                  <CommandEmpty>No users found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="unassigned"
+                      onSelect={() => {
+                        setFormData({ ...formData, assigned_to_id: "" });
+                        setAssignOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          !formData.assigned_to_id ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      Unassigned
+                    </CommandItem>
+                    {users.map((u) => (
+                      <CommandItem
+                        key={u.id}
+                        value={`${u.full_name || ""} ${u.email}`.trim()}
+                        onSelect={() => {
+                          setFormData({ ...formData, assigned_to_id: u.id });
+                          setAssignOpen(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            formData.assigned_to_id === u.id
+                              ? "opacity-100"
+                              : "opacity-0"
+                          )}
+                        />
+                        {getUserLabel(u)}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
       <div className="space-y-2">

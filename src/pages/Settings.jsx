@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,6 +31,7 @@ import {
 import UserManagementSection from "@/components/settings/UserManagementSection";
 
 export default function Settings({ currentUser, isSuperAdmin }) {
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
   const [uploading, setUploading] = useState({ task: false, level: false });
@@ -54,6 +56,9 @@ export default function Settings({ currentUser, isSuperAdmin }) {
     linkedin_url: ""
   });
   const [orgSaving, setOrgSaving] = useState(false);
+
+  const [profileData, setProfileData] = useState({ full_name: "" });
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     task_completion_sound_url: "",
@@ -117,6 +122,11 @@ export default function Settings({ currentUser, isSuperAdmin }) {
       mounted = false;
     };
   }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setProfileData({ full_name: currentUser.full_name || "" });
+  }, [currentUser]);
 
   /**
    * FILE UPLOAD
@@ -183,6 +193,25 @@ export default function Settings({ currentUser, isSuperAdmin }) {
     } catch (err) {
       console.error(err);
       toast.error("Failed to update preference");
+    }
+  };
+
+  const handleProfileSave = async () => {
+    setProfileSaving(true);
+    try {
+      const fullName = profileData.full_name?.trim() || null;
+      await apiFetch("/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({ full_name: fullName })
+      });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("Profile updated");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update profile");
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -342,6 +371,38 @@ export default function Settings({ currentUser, isSuperAdmin }) {
               checked={currentUser?.dark_mode || false}
               onCheckedChange={toggleDarkMode}
             />
+          </CardContent>
+        </Card>
+
+        {/* Profile */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Profile</CardTitle>
+            <CardDescription>
+              Add your name so assignments show up correctly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>Full name</Label>
+              <Input
+                value={profileData.full_name}
+                onChange={(e) =>
+                  setProfileData({ ...profileData, full_name: e.target.value })
+                }
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={handleProfileSave}
+                disabled={profileSaving}
+                className="gap-2 bg-[#835879] hover:bg-[#6d4a64]"
+              >
+                <Save className="w-4 h-4" />
+                {profileSaving ? "Saving..." : "Save Profile"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

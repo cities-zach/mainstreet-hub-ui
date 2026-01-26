@@ -32,9 +32,10 @@ export default function InviteAccept() {
 
   const canSubmit = useMemo(() => {
     if (!token || !email) return false;
+    if (!fullName || !fullName.trim()) return false;
     if (!password || password.length < 8) return false;
     return password === confirmPassword;
-  }, [token, email, password, confirmPassword]);
+  }, [token, email, fullName, password, confirmPassword]);
 
   const acceptInvite = async (event) => {
     event.preventDefault();
@@ -79,7 +80,7 @@ export default function InviteAccept() {
 
       await apiFetch("/invites/accept", {
         method: "POST",
-        body: JSON.stringify({ token, full_name: fullName || null }),
+        body: JSON.stringify({ token, full_name: fullName.trim() }),
       });
 
       toast.success("Invite accepted!");
@@ -125,7 +126,7 @@ export default function InviteAccept() {
 
             <form onSubmit={acceptInvite} className="space-y-4">
               <div className="space-y-2">
-                <Label>Full name (optional)</Label>
+                <Label>Full name *</Label>
                 <Input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}

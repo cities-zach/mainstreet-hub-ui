@@ -10,24 +10,28 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { UserPlus, Mail, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, UserPlus, Mail, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/api";
+import { cn } from "@/lib/utils";
 
 export default function VolunteerManagerDialog({ job, open, onOpenChange, currentUser }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("invite");
   const [inviteData, setInviteData] = useState({ userId: "" });
   const [nonUserData, setNonUserData] = useState({ name: "", email: "", phone: "" });
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
@@ -133,6 +137,15 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
     currentUser?.role === "admin" ||
     currentUser?.role === "super_admin";
 
+  const getUserLabel = (user) => {
+    if (!user) return "Unknown user";
+    const name = user.full_name?.trim();
+    if (name) return `${name} (${user.email})`;
+    return user.email || "Unnamed user";
+  };
+
+  const selectedUser = users.find((u) => u.id === inviteData.userId);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -152,18 +165,46 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
           <TabsContent value="invite" className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Select User</Label>
-              <Select value={inviteData.userId} onValueChange={(val) => setInviteData({ userId: val })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Search users..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map(u => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.full_name || u.email} ({u.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={inviteOpen} onOpenChange={setInviteOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                  >
+                    {inviteData.userId ? getUserLabel(selectedUser) : "Select a user…"}
+                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="Search users..." />
+                    <CommandList>
+                      <CommandEmpty>No users found.</CommandEmpty>
+                      <CommandGroup>
+                        {users.map((u) => (
+                          <CommandItem
+                            key={u.id}
+                            value={`${u.full_name || ""} ${u.email}`.trim()}
+                            onSelect={() => {
+                              setInviteData({ userId: u.id });
+                              setInviteOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                inviteData.userId === u.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {getUserLabel(u)}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <Button
               onClick={handleInvite}
