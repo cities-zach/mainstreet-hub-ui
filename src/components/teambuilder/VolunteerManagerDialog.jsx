@@ -170,10 +170,12 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
                   <Button
                     variant="outline"
                     role="combobox"
-                    className="w-full justify-between"
+                    className="w-full justify-between overflow-hidden"
                   >
-                    {inviteData.userId ? getUserLabel(selectedUser) : "Select a user…"}
-                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                    <span className="truncate">
+                      {inviteData.userId ? getUserLabel(selectedUser) : "Select a user…"}
+                    </span>
+                    <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-full p-0">
