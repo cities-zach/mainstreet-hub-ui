@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, Shuffle } from "lucide-react";
+import { Plus, Save } from "lucide-react";
 import { apiFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import WheelCanvas from "@/components/wheelspin/WheelCanvas";
+import { Link } from "react-router-dom";
 
 const emptyEntry = { label: "", weight: 1 };
 
@@ -35,10 +36,6 @@ export default function WheelSpin({ me }) {
   const [entries, setEntries] = useState([{ ...emptyEntry }]);
   const [winnersCount, setWinnersCount] = useState(1);
   const [removeWinnerOnSpin, setRemoveWinnerOnSpin] = useState(true);
-  const [rotation, setRotation] = useState(0);
-  const [winners, setWinners] = useState([]);
-  const [excludeIds, setExcludeIds] = useState([]);
-  const [isSpinning, setIsSpinning] = useState(false);
 
   const { data: wheelList = [] } = useQuery({
     queryKey: ["wheelspin", "list"],
@@ -64,8 +61,6 @@ export default function WheelSpin({ me }) {
       weight: Number(entry.weight) || 1
     }));
     setEntries(normalized.length ? normalized : [{ ...emptyEntry }]);
-    setWinners([]);
-    setExcludeIds([]);
   }, [wheelDetail]);
 
   const totalTickets = useMemo(
@@ -107,40 +102,6 @@ export default function WheelSpin({ me }) {
     }
   });
 
-  const spinWheel = useMutation({
-    mutationFn: () =>
-      apiFetch(`/wheelspin/${selectedWheelId}/spin`, {
-        method: "POST",
-        body: JSON.stringify({
-          exclude_entry_ids: removeWinnerOnSpin ? excludeIds : []
-        })
-      })
-  });
-
-  const canSpin = Boolean(selectedWheelId) && !isSpinning && winners.length < winnersCount;
-
-  const resetRun = () => {
-    setWinners([]);
-    setExcludeIds([]);
-  };
-
-  const handleSpin = async () => {
-    if (!canSpin) return;
-    setIsSpinning(true);
-    setRotation((prev) => prev + 360 * 4 + Math.random() * 360);
-    try {
-      const result = await spinWheel.mutateAsync();
-      if (result?.winner) {
-        setWinners((prev) => [...prev, result.winner]);
-        if (removeWinnerOnSpin && result.winner.id) {
-          setExcludeIds((prev) => [...prev, result.winner.id]);
-        }
-      }
-    } finally {
-      setTimeout(() => setIsSpinning(false), 1200);
-    }
-  };
-
   const addEntry = () => {
     setEntries((prev) => [...prev, { ...emptyEntry }]);
   };
@@ -163,7 +124,6 @@ export default function WheelSpin({ me }) {
     setEntries([{ ...emptyEntry }]);
     setWinnersCount(1);
     setRemoveWinnerOnSpin(true);
-    resetRun();
   };
 
   if (!isAdmin) {
@@ -193,7 +153,7 @@ export default function WheelSpin({ me }) {
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card className="bg-white/80 dark:bg-slate-900/80">
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <CardTitle>Setup</CardTitle>
@@ -308,45 +268,35 @@ export default function WheelSpin({ me }) {
 
           <Card className="bg-white/80 dark:bg-slate-900/80">
             <CardHeader className="flex flex-col gap-2">
-              <CardTitle>Spin</CardTitle>
+              <CardTitle>Presenter View</CardTitle>
               <p className="text-sm text-slate-500">
-                {winners.length}/{winnersCount} winners selected
+                Open a production-ready spin screen in a new tab.
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
               <WheelCanvas
                 entries={entries}
-                rotation={rotation}
+                rotation={0}
                 primaryColor={primaryColor}
                 className="mx-auto"
               />
-              <div className="flex flex-col gap-2">
-                <Button onClick={handleSpin} disabled={!canSpin}>
-                  <Shuffle className="w-4 h-4 mr-2" />
-                  {isSpinning ? "Spinning..." : "Start Spin"}
-                </Button>
-                <Button variant="outline" onClick={resetRun} disabled={winners.length === 0}>
-                  Reset Run
-                </Button>
-              </div>
-
-              {winners.length > 0 && (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Winners
-                  </div>
-                  <div className="space-y-2">
-                    {winners.map((winner, idx) => (
-                      <div
-                        key={`${winner.id || winner.label}-${idx}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                      >
-                        <span>{winner.label}</span>
-                        <span className="text-xs text-slate-500">Spin {idx + 1}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <Button
+                asChild
+                className="w-full"
+                disabled={!selectedWheelId}
+              >
+                <Link
+                  to={selectedWheelId ? `/wheelspin/${selectedWheelId}/presenter` : "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Presenter View
+                </Link>
+              </Button>
+              {!selectedWheelId && (
+                <p className="text-xs text-slate-500">
+                  Save the wheel to enable the presenter view.
+                </p>
               )}
             </CardContent>
           </Card>

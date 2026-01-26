@@ -39,6 +39,7 @@ import SupplyStop from "@/pages/SupplyStop";
 /* ---------- VOLUNTEERS ---------- */
 import TeamBuilder from "@/pages/TeamBuilder";
 import WheelSpin from "@/pages/WheelSpin";
+import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
 
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
@@ -147,6 +148,10 @@ function AppInner() {
 
           {/* ---------- WHEELSPIN ---------- */}
           <Route path="/wheelspin" element={<WheelSpin me={me} />} />
+          <Route
+            path="/wheelspin/:id/presenter"
+            element={<WheelSpinPresenter me={me} />}
+          />
 
           {/* ---------- SETTINGS ---------- */}
           <Route
