@@ -68,6 +68,7 @@ export default function MeetingNotes() {
   const [agendaFileName, setAgendaFileName] = useState("");
   const [transcriptText, setTranscriptText] = useState("");
   const [showTranscript, setShowTranscript] = useState(false);
+  const [customTaskTitle, setCustomTaskTitle] = useState("");
 
   const { data: meetings = [] } = useQuery({
     queryKey: ["ai-meetings", meetingSearch],
@@ -552,6 +553,37 @@ export default function MeetingNotes() {
                     </div>
                   </label>
                 ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Add a task</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={customTaskTitle}
+                  onChange={(event) => setCustomTaskTitle(event.target.value)}
+                  placeholder="Add a task that was missed..."
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const trimmed = customTaskTitle.trim();
+                    if (!trimmed) return;
+                    setTaskSuggestions((prev) => [
+                      ...prev,
+                      {
+                        title: trimmed,
+                        description: "",
+                        due_date: null,
+                        assigned_to_id: "",
+                        selected: true,
+                      },
+                    ]);
+                    setCustomTaskTitle("");
+                  }}
+                >
+                  Add task
+                </Button>
               </div>
             </div>
 
