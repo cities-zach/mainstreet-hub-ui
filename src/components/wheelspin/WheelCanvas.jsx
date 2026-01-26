@@ -127,36 +127,38 @@ export default function WheelCanvas({
               />
               {(() => {
                 const baseRotation = wedge.midAngle + 90;
-                const normalized =
-                  ((baseRotation % 360) + 360) % 360;
+                const normalized = ((baseRotation % 360) + 360) % 360;
                 const shouldFlip = normalized > 90 && normalized < 270;
                 const rotation = shouldFlip ? baseRotation + 180 : baseRotation;
                 const angleSize = wedge.slice || 0;
                 const fontSize =
-                  angleSize < 4 ? 6 : angleSize < 8 ? 7 : angleSize < 12 ? 9 : angleSize < 18 ? 10 : 12;
-                const radius =
-                  angleSize < 6 ? 90 : angleSize < 12 ? 105 : 120;
-                const textLength =
-                  angleSize < 6 ? 70 : angleSize < 12 ? 90 : 130;
+                  entries.length > 80
+                    ? 7
+                    : entries.length > 50
+                      ? 8
+                      : angleSize < 8
+                        ? 8
+                        : angleSize < 14
+                          ? 10
+                          : 12;
+                const radius = entries.length > 60 ? 100 : 118;
                 return (
                   <g
                     transform={`rotate(${rotation} 200 200) translate(200 200)`}
                   >
-                <text
-                  x="0"
-                  y={-radius}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="fill-slate-900"
-                  style={{
-                    fontSize,
-                    fontWeight: 600
-                  }}
-                  textLength={textLength}
-                  lengthAdjust="spacingAndGlyphs"
-                >
-                  {wedge.label}
-                </text>
+                    <text
+                      x="0"
+                      y={-radius}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-slate-900"
+                      style={{
+                        fontSize,
+                        fontWeight: 600
+                      }}
+                    >
+                      {wedge.label}
+                    </text>
                   </g>
                 );
               })()}
