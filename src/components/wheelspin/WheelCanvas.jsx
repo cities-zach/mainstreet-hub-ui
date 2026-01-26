@@ -104,7 +104,7 @@ export default function WheelCanvas({
     <div className={cn("relative flex items-center justify-center", className)}>
       <div className="absolute -top-6 z-10 flex flex-col items-center">
         <div className="h-6 w-1 rounded-full bg-slate-700 shadow-sm dark:bg-slate-200" />
-        <div className="h-0 w-0 border-x-[14px] border-x-transparent border-b-[22px] border-b-slate-700 drop-shadow dark:border-b-slate-200" />
+        <div className="h-0 w-0 border-x-[14px] border-x-transparent border-t-[22px] border-t-slate-700 drop-shadow dark:border-t-slate-200" />
       </div>
       <svg
         viewBox="0 0 400 400"
@@ -126,39 +126,38 @@ export default function WheelCanvas({
                 strokeWidth="2"
               />
               {(() => {
-                const baseRotation = wedge.midAngle;
-                const normalized = ((baseRotation % 360) + 360) % 360;
+                const angle = wedge.midAngle;
+                const normalized = ((angle % 360) + 360) % 360;
                 const shouldFlip = normalized > 90 && normalized < 270;
-                const rotation = shouldFlip ? baseRotation + 180 : baseRotation;
+                const rotation = shouldFlip ? angle + 180 : angle;
                 const angleSize = wedge.slice || 0;
                 const fontSize =
-                  entries.length > 100
+                  entries.length > 120
                     ? 6
-                    : entries.length > 70
+                    : entries.length > 80
                       ? 7
-                      : entries.length > 40
+                      : entries.length > 50
                         ? 8
                         : angleSize < 10
                           ? 9
                           : 12;
-                const radius = entries.length > 60 ? 102 : 122;
-                const textX = shouldFlip ? -radius : radius;
+                const radius = entries.length > 60 ? 110 : 125;
+                const pos = polarToCartesian(200, 200, radius, angle);
                 return (
-                  <g transform={`translate(200 200) rotate(${rotation})`}>
-                    <text
-                      x={textX}
-                      y="0"
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      className="fill-slate-900"
-                      style={{
-                        fontSize,
-                        fontWeight: 600
-                      }}
-                    >
-                      {wedge.label}
-                    </text>
-                  </g>
+                  <text
+                    x={pos.x}
+                    y={pos.y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="fill-slate-900"
+                    style={{
+                      fontSize,
+                      fontWeight: 600
+                    }}
+                    transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
+                  >
+                    {wedge.label}
+                  </text>
                 );
               })()}
             </g>
