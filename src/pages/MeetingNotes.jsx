@@ -118,6 +118,12 @@ export default function MeetingNotes() {
   useEffect(() => {
     const fetchNote = async () => {
       if (!selectedMeetingId) return;
+      if (selectedMeeting?.summary_status !== "completed") {
+        setNoteSummary("");
+        setDecisions([]);
+        setTaskSuggestions([]);
+        return;
+      }
       try {
         const note = await apiFetch(`/ai/meetings/${selectedMeetingId}/notes`);
         setNoteSummary(note.summary || "");
@@ -135,7 +141,7 @@ export default function MeetingNotes() {
       }
     };
     fetchNote();
-  }, [selectedMeetingId]);
+  }, [selectedMeetingId, selectedMeeting?.summary_status]);
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
