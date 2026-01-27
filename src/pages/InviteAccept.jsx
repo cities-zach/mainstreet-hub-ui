@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 export default function InviteAccept() {
@@ -19,6 +20,8 @@ export default function InviteAccept() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const { data: invite, isLoading } = useQuery({
     queryKey: ["invite", token],
@@ -34,8 +37,17 @@ export default function InviteAccept() {
     if (!token || !email) return false;
     if (!fullName || !fullName.trim()) return false;
     if (!password || password.length < 8) return false;
+    if (!acceptedPrivacy || !acceptedTerms) return false;
     return password === confirmPassword;
-  }, [token, email, fullName, password, confirmPassword]);
+  }, [
+    token,
+    email,
+    fullName,
+    password,
+    confirmPassword,
+    acceptedPrivacy,
+    acceptedTerms,
+  ]);
 
   const acceptInvite = async (event) => {
     event.preventDefault();
@@ -82,6 +94,7 @@ export default function InviteAccept() {
         method: "POST",
         body: JSON.stringify({ token, full_name: fullName.trim() }),
       });
+      await apiFetch("/policies/accept", { method: "POST" });
 
       toast.success("Invite accepted!");
       navigate("/");
@@ -148,6 +161,36 @@ export default function InviteAccept() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
+              </div>
+              <div className="space-y-3 text-sm text-slate-600">
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    checked={acceptedPrivacy}
+                    onCheckedChange={(value) =>
+                      setAcceptedPrivacy(Boolean(value))
+                    }
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <a className="text-[#835879] underline" href="/privacy" target="_blank" rel="noreferrer">
+                      Privacy Policy
+                    </a>
+                    .
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    checked={acceptedTerms}
+                    onCheckedChange={(value) => setAcceptedTerms(Boolean(value))}
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <a className="text-[#835879] underline" href="/terms" target="_blank" rel="noreferrer">
+                      Terms of Service
+                    </a>
+                    .
+                  </span>
+                </label>
               </div>
 
               {notice && (

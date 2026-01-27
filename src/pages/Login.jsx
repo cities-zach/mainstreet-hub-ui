@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/lib/supabaseClient";
+import { apiFetch } from "@/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,6 +15,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -28,11 +32,19 @@ export default function Login() {
         if (error) throw error;
         navigate("/", { replace: true });
       } else {
+        if (!acceptedPrivacy || !acceptedTerms) {
+          setStatus({
+            type: "error",
+            message: "Please accept the Privacy Policy and Terms of Service.",
+          });
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
+        await apiFetch("/policies/accept", { method: "POST" });
         setStatus({
           type: "success",
           message: "Account created. You can now sign in.",
@@ -79,6 +91,38 @@ export default function Login() {
                 required
               />
             </div>
+            {mode === "sign_up" && (
+              <div className="space-y-3 text-sm text-slate-600">
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    checked={acceptedPrivacy}
+                    onCheckedChange={(value) =>
+                      setAcceptedPrivacy(Boolean(value))
+                    }
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <a className="text-[#835879] underline" href="/privacy" target="_blank" rel="noreferrer">
+                      Privacy Policy
+                    </a>
+                    .
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    checked={acceptedTerms}
+                    onCheckedChange={(value) => setAcceptedTerms(Boolean(value))}
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <a className="text-[#835879] underline" href="/terms" target="_blank" rel="noreferrer">
+                      Terms of Service
+                    </a>
+                    .
+                  </span>
+                </label>
+              </div>
+            )}
 
             {status && (
               <div

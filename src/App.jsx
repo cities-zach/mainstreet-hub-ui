@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/queryClient";
 import { apiFetch } from "@/api";
 import { supabase } from "@/lib/supabaseClient";
@@ -45,12 +45,16 @@ import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
 import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
 import AppShell from "@/components/layout/AppShell";
+import PolicyAcceptanceModal from "@/components/policies/PolicyAcceptanceModal";
 import Login from "@/pages/Login";
 import InviteAccept from "@/pages/InviteAccept";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsOfService from "@/pages/TermsOfService";
 
 function AppInner() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let isMounted = true;
@@ -94,6 +98,8 @@ function AppInner() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/invite" element={<InviteAccept />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
@@ -102,12 +108,40 @@ function AppInner() {
   if (isLoading) return <p>Loading…</p>;
   if (error) return <p style={{ color: "red" }}>{error.message}</p>;
 
+  const policyVersions = me?.policy_versions;
+  const privacyAccepted =
+    me?.user?.privacy_policy_version &&
+    me?.user?.privacy_policy_version === policyVersions?.privacy_policy_version;
+  const termsAccepted =
+    me?.user?.terms_of_service_version &&
+    me?.user?.terms_of_service_version === policyVersions?.terms_of_service_version;
+  const needsPolicyAcceptance = Boolean(
+    me?.user &&
+      policyVersions &&
+      (!privacyAccepted || !termsAccepted)
+  );
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/invite" element={<InviteAccept />} />
-        <Route element={<AppShell me={me} />}>
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route
+          element={
+            <>
+              <PolicyAcceptanceModal
+                isOpen={needsPolicyAcceptance}
+                policyVersions={policyVersions}
+                onAccepted={() =>
+                  queryClient.invalidateQueries({ queryKey: ["me"] })
+                }
+              />
+              <AppShell me={me} />
+            </>
+          }
+        >
           {/* ---------- HOME ---------- */}
           <Route path="/" element={<Dashboard me={me} />} />
 
