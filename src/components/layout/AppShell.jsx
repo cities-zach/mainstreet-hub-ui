@@ -91,11 +91,24 @@ export default function AppShell({ me }) {
           </Button>
           <Link to="/" className="flex items-center gap-3">
             {organization?.logo_url ? (
-              <img
-                src={organization.logo_url}
-                alt={`${orgName} logo`}
-                className="w-9 h-9 rounded-full object-cover border border-slate-200"
-              />
+              <>
+                <img
+                  src={organization.logo_url}
+                  alt={`${orgName} logo`}
+                  className="w-9 h-9 rounded-full object-cover border border-slate-200"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                    const fallback = event.currentTarget.nextSibling;
+                    if (fallback?.style) fallback.style.display = "flex";
+                  }}
+                />
+                <div
+                  className="w-9 h-9 rounded-full bg-[#835879]/20 items-center justify-center text-[#835879] font-semibold hidden"
+                  aria-hidden
+                >
+                  {orgName.slice(0, 1).toUpperCase()}
+                </div>
+              </>
             ) : (
               <div className="w-9 h-9 rounded-full bg-[#835879]/20 flex items-center justify-center text-[#835879] font-semibold">
                 {orgName.slice(0, 1).toUpperCase()}

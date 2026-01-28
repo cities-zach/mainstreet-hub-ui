@@ -92,6 +92,38 @@ function AppInner() {
     document.documentElement.classList.toggle("dark", enabled);
   }, [me?.user?.dark_mode]);
 
+  useEffect(() => {
+    const faviconUrl = me?.organization?.logo_url || "/favicon.png";
+    if (typeof document === "undefined") return;
+    let link = document.querySelector("link[rel='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    const setFavicon = (url) => {
+      const cleanUrl = url.split("?")[0];
+      const extension = cleanUrl.split(".").pop()?.toLowerCase();
+      link.type =
+        extension === "svg"
+          ? "image/svg+xml"
+          : extension === "jpg" || extension === "jpeg"
+            ? "image/jpeg"
+            : "image/png";
+      link.href = url;
+    };
+
+    if (!me?.organization?.logo_url) {
+      setFavicon("/favicon.png");
+      return;
+    }
+
+    const tester = new Image();
+    tester.onload = () => setFavicon(faviconUrl);
+    tester.onerror = () => setFavicon("/favicon.png");
+    tester.src = faviconUrl;
+  }, [me?.organization?.logo_url]);
+
   if (authLoading) return <p>Loading…</p>;
   if (!session) {
     return (
