@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CheckCircle, Circle, ListChecks, Trash2 } from "lucide-react";
+import { CheckCircle, Circle, ListChecks, Pencil, Trash2 } from "lucide-react";
 import { differenceInCalendarDays, endOfDay, format, isBefore, parseISO } from "date-fns";
 import { apiFetch } from "@/api";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import TaskForm from "@/components/taskmaster/TaskForm";
 
 export default function TaskItem({
   task,
@@ -26,6 +27,7 @@ export default function TaskItem({
   const completed = task.status === "completed";
   const [isProcessing, setIsProcessing] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [steps, setSteps] = useState([]);
   const [stepsLoading, setStepsLoading] = useState(false);
   const [newStepTitle, setNewStepTitle] = useState("");
@@ -178,15 +180,26 @@ export default function TaskItem({
             )}
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-2"
-          onClick={() => setStepsOpen(true)}
-        >
-          <ListChecks className="w-4 h-4" />
-          Steps
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-2"
+            onClick={() => setStepsOpen(true)}
+          >
+            <ListChecks className="w-4 h-4" />
+            Steps
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-2"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="w-4 h-4" />
+            Edit
+          </Button>
+        </div>
       </div>
 
       <Dialog open={stepsOpen} onOpenChange={setStepsOpen}>
@@ -242,6 +255,26 @@ export default function TaskItem({
               <Button type="submit">Add</Button>
             </form>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>
+              Update task details or assign it to yourself.
+            </DialogDescription>
+          </DialogHeader>
+          <TaskForm
+            task={task}
+            currentUser={currentUser}
+            onSuccess={() => {
+              onUpdate?.();
+              setEditOpen(false);
+            }}
+            onCancel={() => setEditOpen(false)}
+          />
         </DialogContent>
       </Dialog>
     </>

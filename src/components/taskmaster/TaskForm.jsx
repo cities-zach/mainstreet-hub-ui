@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,21 +14,24 @@ import {
   CommandItem,
   CommandList
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/api";
 import { cn } from "@/lib/utils";
 
-export default function TaskForm({ onSuccess, onCancel, currentUser }) {
+export default function TaskForm({ onSuccess, onCancel, currentUser, task = null }) {
   const queryClient = useQueryClient();
+  const isEdit = !!task;
   const [assignOpen, setAssignOpen] = useState(false);
   const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    due_date: "",
-    event_id: "",
-    assigned_to_id: "",
-    is_private: false
+    title: task?.title || "",
+    description: task?.description || "",
+    due_date: task?.due_date || "",
+    event_id: task?.event_id || "",
+    assigned_to_id: task?.assigned_to_id || "",
+    is_private: task?.is_private || false
   });
+  const [newStepTitle, setNewStepTitle] = useState("");
+  const [steps, setSteps] = useState([]);
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
@@ -57,20 +60,47 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
         assigned_to_id: "",
         is_private: false
       });
+      setSteps([]);
+      setNewStepTitle("");
     }
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (data) =>
+      apiFetch(`/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      onSuccess?.();
+    }
+  });
+
+  const trimmedSteps = useMemo(
+    () => steps.map((step) => step.title.trim()).filter(Boolean),
+    [steps]
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.title.trim()) return;
-    createMutation.mutate({
+    const payload = {
       ...formData,
       due_date: formData.due_date || null,
       event_id: formData.event_id || null,
       assigned_to_id: formData.assigned_to_id || null,
       assigned_by_id: currentUser?.id || null,
       is_private: !!formData.is_private
-    });
+    };
+    if (isEdit) {
+      updateMutation.mutate(payload);
+    } else {
+      createMutation.mutate({
+        ...payload,
+        steps: trimmedSteps
+      });
+    }
   };
 
   const getUserLabel = (user) => {
@@ -109,7 +139,21 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Assign To</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label>Assign To</Label>
+            {isEdit && currentUser?.id && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setFormData({ ...formData, assigned_to_id: currentUser.id })
+                }
+              >
+                Assign to me
+              </Button>
+            )}
+          </div>
           <Popover open={assignOpen} onOpenChange={setAssignOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -188,6 +232,60 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
           ))}
         </select>
       </div>
+      {!isEdit && (
+        <div className="space-y-2">
+          <Label>Steps</Label>
+          {steps.length > 0 && (
+            <div className="space-y-2">
+              {steps.map((step, index) => (
+                <div key={step.id} className="flex items-center gap-2">
+                  <Input
+                    value={step.title}
+                    onChange={(event) => {
+                      const next = [...steps];
+                      next[index] = { ...next[index], title: event.target.value };
+                      setSteps(next);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() =>
+                      setSteps((prev) => prev.filter((_, i) => i !== index))
+                    }
+                  >
+                    <Trash2 className="h-4 w-4 text-slate-500" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              value={newStepTitle}
+              onChange={(event) => setNewStepTitle(event.target.value)}
+              placeholder="Add a step..."
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const title = newStepTitle.trim();
+                if (!title) return;
+                setSteps((prev) => [
+                  ...prev,
+                  { id: `${Date.now()}-${prev.length}`, title }
+                ]);
+                setNewStepTitle("");
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
         <Checkbox
           checked={formData.is_private}
@@ -206,8 +304,8 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? "Saving..." : "Save Task"}
+        <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+          {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save Task"}
         </Button>
       </div>
     </form>
