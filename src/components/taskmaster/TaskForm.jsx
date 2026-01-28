@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,8 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
     description: "",
     due_date: "",
     event_id: "",
-    assigned_to_id: ""
+    assigned_to_id: "",
+    is_private: false
   });
 
   const { data: users = [] } = useQuery({
@@ -52,7 +54,8 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
         description: "",
         due_date: "",
         event_id: "",
-        assigned_to_id: ""
+        assigned_to_id: "",
+        is_private: false
       });
     }
   });
@@ -65,7 +68,8 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
       due_date: formData.due_date || null,
       event_id: formData.event_id || null,
       assigned_to_id: formData.assigned_to_id || null,
-      assigned_by_id: currentUser?.id || null
+      assigned_by_id: currentUser?.id || null,
+      is_private: !!formData.is_private
     });
   };
 
@@ -183,6 +187,20 @@ export default function TaskForm({ onSuccess, onCancel, currentUser }) {
             </option>
           ))}
         </select>
+      </div>
+      <div className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        <Checkbox
+          checked={formData.is_private}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, is_private: Boolean(checked) })
+          }
+        />
+        <div>
+          <p className="font-medium">Private task</p>
+          <p className="text-xs text-slate-500">
+            Only the assigner and assignee can view private tasks.
+          </p>
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
