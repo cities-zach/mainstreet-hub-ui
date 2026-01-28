@@ -44,6 +44,7 @@ import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
+import AiSessions from "@/pages/AiSessions";
 import AppShell from "@/components/layout/AppShell";
 import PolicyAcceptanceModal from "@/components/policies/PolicyAcceptanceModal";
 import Login from "@/pages/Login";
@@ -194,10 +195,15 @@ function AppInner() {
               <Settings
                 currentUser={me?.user}
                 isSuperAdmin={me?.user?.role === "super_admin"}
+                isAdmin={
+                  me?.user?.role === "admin" ||
+                  me?.user?.role === "super_admin"
+                }
               />
             }
           />
           <Route path="/settings/users" element={<UserManagement />} />
+          <Route path="/settings/ai-sessions" element={<AiSessions />} />
         </Route>
       </Routes>
     </BrowserRouter>

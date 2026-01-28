@@ -29,8 +29,9 @@ import {
 } from "lucide-react";
 
 import UserManagementSection from "@/components/settings/UserManagementSection";
+import AiSessionMemorySection from "@/components/settings/AiSessionMemorySection";
 
-export default function Settings({ currentUser, isSuperAdmin }) {
+export default function Settings({ currentUser, isSuperAdmin, isAdmin }) {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
@@ -615,9 +616,10 @@ export default function Settings({ currentUser, isSuperAdmin }) {
         </Card>
 
         {/* Super Admin Sections */}
-        {isSuperAdmin && (
+        {isAdmin && (
           <>
             <UserManagementSection />
+            <AiSessionMemorySection />
 
             {/* Gamification Sounds */}
             <Card>
