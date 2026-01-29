@@ -21,6 +21,10 @@ export default function AIChatPanel({ isOpen, onClose }) {
   const messagesRef = useRef(null);
   const bottomRef = useRef(null);
 
+  const scrollToBottom = (behavior = "smooth") => {
+    bottomRef.current?.scrollIntoView({ behavior });
+  };
+
   const hasMessages = useMemo(() => messages.length > 0, [messages.length]);
 
   useEffect(() => {
@@ -35,7 +39,7 @@ export default function AIChatPanel({ isOpen, onClose }) {
 
   useEffect(() => {
     if (!isOpen || !isNearBottom) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottom();
   }, [isOpen, messages, isNearBottom]);
 
   const handleScroll = (event) => {
@@ -52,6 +56,8 @@ export default function AIChatPanel({ isOpen, onClose }) {
     setMessages(nextMessages);
     setInput("");
     setIsSending(true);
+    setIsNearBottom(true);
+    requestAnimationFrame(() => scrollToBottom());
 
     try {
       const response = await apiFetch("/ai/chat", {
@@ -144,7 +150,7 @@ export default function AIChatPanel({ isOpen, onClose }) {
           <div
             key={`${msg.role}-${index}`}
             className={cn(
-              "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm",
+              "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm whitespace-pre-wrap",
               msg.role === "user"
                 ? "ml-auto bg-[#835879] text-white"
                 : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100"
