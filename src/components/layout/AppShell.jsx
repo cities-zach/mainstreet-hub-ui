@@ -20,6 +20,7 @@ import {
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import NotificationsBell from "@/components/notifications/NotificationsBell";
 
 export default function AppShell({ me }) {
   const isAdmin =
@@ -135,6 +136,7 @@ export default function AppShell({ me }) {
         </Link>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <NotificationsBell />
           <Button
             variant={chatOpen ? "ghost" : "default"}
             className={cn(

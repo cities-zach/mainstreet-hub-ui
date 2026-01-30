@@ -60,6 +60,7 @@ export default function Settings({ currentUser, isSuperAdmin, isAdmin }) {
 
   const [profileData, setProfileData] = useState({ full_name: "" });
   const [profileSaving, setProfileSaving] = useState(false);
+  const [notificationEmailsEnabled, setNotificationEmailsEnabled] = useState(true);
 
   const [formData, setFormData] = useState({
     task_completion_sound_url: "",
@@ -127,6 +128,9 @@ export default function Settings({ currentUser, isSuperAdmin, isAdmin }) {
   useEffect(() => {
     if (!currentUser) return;
     setProfileData({ full_name: currentUser.full_name || "" });
+    setNotificationEmailsEnabled(
+      currentUser.notification_emails_enabled !== false
+    );
   }, [currentUser]);
 
   /**
@@ -193,6 +197,22 @@ export default function Settings({ currentUser, isSuperAdmin, isAdmin }) {
       document.documentElement.classList.toggle("dark", checked);
     } catch (err) {
       console.error(err);
+      toast.error("Failed to update preference");
+    }
+  };
+
+  const toggleNotificationEmails = async (checked) => {
+    try {
+      setNotificationEmailsEnabled(checked);
+      await apiFetch("/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({ notification_emails_enabled: checked })
+      });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      toast.success("Notification email preference updated");
+    } catch (err) {
+      console.error(err);
+      setNotificationEmailsEnabled((prev) => !prev);
       toast.error("Failed to update preference");
     }
   };
@@ -371,6 +391,23 @@ export default function Settings({ currentUser, isSuperAdmin, isAdmin }) {
             <Switch
               checked={currentUser?.dark_mode || false}
               onCheckedChange={toggleDarkMode}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Notifications */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Email Notifications</CardTitle>
+            <CardDescription>
+              Turn off notification emails while keeping in-app alerts active.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-between items-center">
+            <Label>Notification emails</Label>
+            <Switch
+              checked={notificationEmailsEnabled}
+              onCheckedChange={toggleNotificationEmails}
             />
           </CardContent>
         </Card>
