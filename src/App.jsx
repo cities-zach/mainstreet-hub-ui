@@ -40,6 +40,8 @@ import SupplyStop from "@/pages/SupplyStop";
 import TeamBuilder from "@/pages/TeamBuilder";
 import WheelSpin from "@/pages/WheelSpin";
 import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
+import PassportAdmin from "@/pages/PassportAdmin";
+import PassportPublic from "@/pages/PassportPublic";
 
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
@@ -133,6 +135,7 @@ function AppInner() {
           <Route path="/invite" element={<InviteAccept />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/p/:slug" element={<PassportPublic />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
@@ -161,6 +164,7 @@ function AppInner() {
         <Route path="/invite" element={<InviteAccept />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/p/:slug" element={<PassportPublic />} />
         <Route
           element={
             <>
@@ -219,6 +223,9 @@ function AppInner() {
             path="/wheelspin/:id/presenter"
             element={<WheelSpinPresenter me={me} />}
           />
+
+          {/* ---------- PASSPORTS ---------- */}
+          <Route path="/passports" element={<PassportAdmin />} />
 
           {/* ---------- SETTINGS ---------- */}
           <Route

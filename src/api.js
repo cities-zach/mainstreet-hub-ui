@@ -111,6 +111,105 @@ export function markAllNotificationsRead() {
   return apiFetch("/notifications/read-all", { method: "POST" });
 }
 
+// ----------------------
+// Passport (admin)
+// ----------------------
+
+export function getPassports() {
+  return apiFetch("/passports");
+}
+
+export function getPassport(id) {
+  return apiFetch(`/passports/${id}`);
+}
+
+export function createPassport(data) {
+  return apiFetch("/passports", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function updatePassport(id, data) {
+  return apiFetch(`/passports/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
+}
+
+export function publishPassport(id) {
+  return apiFetch(`/passports/${id}/publish`, { method: "POST" });
+}
+
+export function lockPassport(id) {
+  return apiFetch(`/passports/${id}/lock`, { method: "POST" });
+}
+
+export function createPassportStop(id, data) {
+  return apiFetch(`/passports/${id}/stops`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function updatePassportStop(passportId, stopId, data) {
+  return apiFetch(`/passports/${passportId}/stops/${stopId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
+}
+
+export function reorderPassportStops(passportId, order) {
+  return apiFetch(`/passports/${passportId}/stops/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ order })
+  });
+}
+
+export function exportPassportEntries(passportId) {
+  return apiFetch(`/passports/${passportId}/entries/export`);
+}
+
+export function exportPassportEntriesToWheelspin(passportId, data) {
+  return apiFetch(`/passports/${passportId}/entries/export-to-wheelspin`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+// ----------------------
+// Passport (public)
+// ----------------------
+
+export function getPublicPassport(slug) {
+  return apiFetch(`/p/${slug}`);
+}
+
+export function createPassportInstance(slug, data) {
+  return apiFetch(`/p/${slug}/instance`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function getPassportInstance(token) {
+  return apiFetch(`/p/instance/${token}`);
+}
+
+export function stampPassportInstance(token, data) {
+  return apiFetch(`/p/instance/${token}/stamp`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function updatePassportInstance(token, data) {
+  return apiFetch(`/p/instance/${token}`, {
+    method: "PATCH",
+    body: JSON.stringify(data || {})
+  });
+}
+
 export function getEventBudgetTotals(eventId) {
   return apiFetch(`/events/${eventId}/budget/totals`);
 }
