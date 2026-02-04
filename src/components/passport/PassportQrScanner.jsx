@@ -8,7 +8,6 @@ export default function PassportQrScanner({ isOpen, onClose, onScan }) {
     []
   );
   const qrRef = useRef(null);
-  const startedRef = useRef(false);
   const scanningRef = useRef(false);
 
   useEffect(() => {
@@ -19,7 +18,6 @@ export default function PassportQrScanner({ isOpen, onClose, onScan }) {
     const qr = qrRef.current;
     let active = true;
 
-    startedRef.current = false;
     qr
       .start(
       { facingMode: "environment" },
@@ -34,20 +32,14 @@ export default function PassportQrScanner({ isOpen, onClose, onScan }) {
         }, 1500);
       },
       () => {}
-    )
-      .then(() => {
-        startedRef.current = true;
-      })
-      .catch(() => {});
+    ).catch(() => {});
 
     return () => {
       active = false;
       if (!qrRef.current) return;
-      qr.stop()
-        .then(() => qr.clear())
-        .catch(() => {
-          // If stop fails, avoid calling clear to prevent crashes.
-        });
+      qr.stop().catch(() => {
+        // Avoid throwing if stop is called while not running.
+      });
     };
   }, [containerId, isOpen, onScan]);
 
