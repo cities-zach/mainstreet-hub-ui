@@ -226,6 +226,25 @@ export default function PassportPublic() {
     }
   };
 
+  const completedCount = visitedStopIds.size;
+  const totalStops = stops.length;
+  const requireContact = passport?.require_contact;
+  const requiredStops =
+    passport?.required_stops_count == null ? totalStops : passport.required_stops_count;
+  const progressValue =
+    requiredStops > 0 ? Math.min(100, Math.round((completedCount / requiredStops) * 100)) : 0;
+  const isComplete = Boolean(passport) && requiredStops > 0 && completedCount >= requiredStops;
+
+  useEffect(() => {
+    if (!passport) return;
+    if (isComplete && !completedOnceRef.current) {
+      completedOnceRef.current = true;
+      if (soundSettings.level_up_sound_url) {
+        new Audio(soundSettings.level_up_sound_url).play().catch(() => {});
+      }
+    }
+  }, [isComplete, passport, soundSettings.level_up_sound_url]);
+
   if (loading) {
     return <div className="p-6 text-sm text-slate-500">Loading passport…</div>;
   }
@@ -235,24 +254,6 @@ export default function PassportPublic() {
   if (!passport) {
     return <div className="p-6 text-sm text-slate-500">Passport not found.</div>;
   }
-
-  const completedCount = visitedStopIds.size;
-  const totalStops = stops.length;
-  const requireContact = passport.require_contact;
-  const requiredStops =
-    passport.required_stops_count == null ? totalStops : passport.required_stops_count;
-  const progressValue =
-    requiredStops > 0 ? Math.min(100, Math.round((completedCount / requiredStops) * 100)) : 0;
-  const isComplete = requiredStops > 0 && completedCount >= requiredStops;
-
-  useEffect(() => {
-    if (isComplete && !completedOnceRef.current) {
-      completedOnceRef.current = true;
-      if (soundSettings.level_up_sound_url) {
-        new Audio(soundSettings.level_up_sound_url).play().catch(() => {});
-      }
-    }
-  }, [isComplete, soundSettings.level_up_sound_url]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
