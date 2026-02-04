@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createPassport,
@@ -7,6 +7,7 @@ import {
   getEvents,
   getPassport,
   getPassports,
+  getPassportStopSuggestions,
   lockPassport,
   publishPassport,
   updatePassport,
@@ -25,6 +26,9 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
+import { uploadPublicFile } from "@/lib/uploads";
+import { toast } from "sonner";
+import { Loader2, Upload } from "lucide-react";
 
 function StopEditor({ stop, onSave }) {
   const [form, setForm] = useState({
@@ -38,6 +42,27 @@ function StopEditor({ stop, onSave }) {
     requires_staff_confirmation: stop.requires_staff_confirmation ?? false,
     extra_entry_multiplier: stop.extra_entry_multiplier ?? ""
   });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setUploadingLogo(true);
+      const result = await uploadPublicFile({
+        bucket: "uploads",
+        pathPrefix: "passport-stops",
+        file
+      });
+      setForm((prev) => ({ ...prev, logo_url: result.file_url }));
+      toast.success("Logo uploaded");
+    } catch (err) {
+      toast.error(err.message || "Failed to upload logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   return (
     <Dialog>
@@ -82,6 +107,35 @@ function StopEditor({ stop, onSave }) {
               setForm({ ...form, logo_url: event.target.value })
             }
           />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={uploadingLogo}
+              onClick={() => document.getElementById(`logo-upload-${stop.id}`)?.click()}
+            >
+              {uploadingLogo ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              <span className="ml-2">Upload logo</span>
+            </Button>
+            {form.logo_url && (
+              <img
+                src={form.logo_url}
+                alt="Stop logo"
+                className="h-10 w-10 rounded-full object-cover border"
+              />
+            )}
+            <input
+              id={`logo-upload-${stop.id}`}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+          </div>
           <Textarea
             placeholder="Special text"
             value={form.special_text}
@@ -153,6 +207,9 @@ export default function PassportAdmin() {
     special_text: "",
     sort_order: ""
   });
+  const [stopSuggestions, setStopSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [uploadingStopLogo, setUploadingStopLogo] = useState(false);
 
   const { data: passports = [], isLoading } = useQuery({
     queryKey: ["passports"],
@@ -169,6 +226,29 @@ export default function PassportAdmin() {
     queryFn: () => getPassport(selectedId),
     enabled: Boolean(selectedId)
   });
+
+  useEffect(() => {
+    if (!stopForm.name || stopForm.name.trim().length < 2) {
+      setStopSuggestions([]);
+      return;
+    }
+    let active = true;
+    const handle = setTimeout(async () => {
+      try {
+        setSuggestionsLoading(true);
+        const suggestions = await getPassportStopSuggestions(stopForm.name.trim());
+        if (active) setStopSuggestions(suggestions || []);
+      } catch {
+        if (active) setStopSuggestions([]);
+      } finally {
+        if (active) setSuggestionsLoading(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(handle);
+    };
+  }, [stopForm.name]);
 
   const createMutation = useMutation({
     mutationFn: createPassport,
@@ -254,6 +334,39 @@ export default function PassportAdmin() {
         ? Number(form.required_stops_count)
         : null
     });
+  };
+
+  const handleStopLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setUploadingStopLogo(true);
+      const result = await uploadPublicFile({
+        bucket: "uploads",
+        pathPrefix: "passport-stops",
+        file
+      });
+      setStopForm((prev) => ({ ...prev, logo_url: result.file_url }));
+      toast.success("Logo uploaded");
+    } catch (err) {
+      toast.error(err.message || "Failed to upload logo");
+    } finally {
+      setUploadingStopLogo(false);
+    }
+  };
+
+  const applySuggestion = (suggestion) => {
+    setStopForm((prev) => ({
+      ...prev,
+      name: suggestion.name || prev.name,
+      address_text: suggestion.address_text || "",
+      lat: suggestion.lat ?? "",
+      lng: suggestion.lng ?? "",
+      logo_url: suggestion.logo_url || "",
+      special_text: suggestion.special_text || ""
+    }));
+    setStopSuggestions([]);
   };
 
   const handleAddStop = () => {
@@ -436,6 +549,28 @@ export default function PassportAdmin() {
                         setStopForm({ ...stopForm, name: event.target.value })
                       }
                     />
+                    {(suggestionsLoading || stopSuggestions.length > 0) && (
+                      <div className="rounded-lg border bg-white shadow-sm">
+                        {suggestionsLoading && (
+                          <div className="px-3 py-2 text-xs text-slate-500">
+                            Loading suggestions…
+                          </div>
+                        )}
+                        {stopSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => applySuggestion(suggestion)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                          >
+                            <div className="font-medium">{suggestion.name}</div>
+                            <div className="text-xs text-slate-500">
+                              {suggestion.address_text || "No address"}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <Input
                       placeholder="Address"
                       value={stopForm.address_text}
@@ -466,6 +601,37 @@ export default function PassportAdmin() {
                         setStopForm({ ...stopForm, logo_url: event.target.value })
                       }
                     />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingStopLogo}
+                        onClick={() =>
+                          document.getElementById("stop-logo-upload")?.click()
+                        }
+                      >
+                        {uploadingStopLogo ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4" />
+                        )}
+                        <span className="ml-2">Upload logo</span>
+                      </Button>
+                      {stopForm.logo_url && (
+                        <img
+                          src={stopForm.logo_url}
+                          alt="Stop logo"
+                          className="h-10 w-10 rounded-full object-cover border"
+                        />
+                      )}
+                      <input
+                        id="stop-logo-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleStopLogoUpload}
+                      />
+                    </div>
                     <Textarea
                       placeholder="Special text"
                       value={stopForm.special_text}

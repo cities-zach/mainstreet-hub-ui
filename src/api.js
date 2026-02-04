@@ -166,6 +166,12 @@ export function reorderPassportStops(passportId, order) {
   });
 }
 
+export function getPassportStopSuggestions(query) {
+  const params = new URLSearchParams();
+  if (query) params.set("query", query);
+  return apiFetch(`/passports/stops/suggestions?${params.toString()}`);
+}
+
 export function exportPassportEntries(passportId) {
   return apiFetch(`/passports/${passportId}/entries/export`);
 }

@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import PassportMap from "@/components/passport/PassportMap";
+import PassportQrScanner from "@/components/passport/PassportQrScanner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 
 export default function PassportPublic() {
   const { slug } = useParams();
@@ -26,6 +33,7 @@ export default function PassportPublic() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showMap, setShowMap] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [contactForm, setContactForm] = useState({
     contact_name: "",
     contact_email: "",
@@ -107,6 +115,30 @@ export default function PassportPublic() {
     stampIfNeeded();
   }, [qrToken, instance?.token]);
 
+  const handleScanResult = async (decodedText) => {
+    if (!instance?.token) return;
+    try {
+      let tokenValue = decodedText;
+      if (decodedText.includes("qr=")) {
+        try {
+          const url = new URL(decodedText);
+          tokenValue = url.searchParams.get("qr") || decodedText;
+        } catch {
+          const parts = decodedText.split("qr=");
+          tokenValue = parts[1]?.split("&")[0] || decodedText;
+        }
+      }
+      await stampPassportInstance(instance.token, { qr_token: tokenValue });
+      const detail = await getPassportInstance(instance.token);
+      setStamps(detail.stamps || []);
+      setEntryCount(detail.entry_count || 0);
+      setStops(detail.stops || []);
+      setScannerOpen(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleContactSave = async () => {
     if (!instance?.token) return;
     try {
@@ -186,7 +218,23 @@ export default function PassportPublic() {
           <Button variant={showMap ? "default" : "outline"} onClick={() => setShowMap(true)}>
             Map view
           </Button>
+          <Button variant="outline" onClick={() => setScannerOpen(true)}>
+            Scan QR
+          </Button>
         </div>
+
+        <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Scan a passport QR code</DialogTitle>
+            </DialogHeader>
+            <PassportQrScanner
+              isOpen={scannerOpen}
+              onClose={() => setScannerOpen(false)}
+              onScan={handleScanResult}
+            />
+          </DialogContent>
+        </Dialog>
 
         {showMap ? (
           <PassportMap stops={stops} stamps={stamps} mapConfig={passport.map_config} />

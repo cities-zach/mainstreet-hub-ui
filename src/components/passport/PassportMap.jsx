@@ -4,7 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 
 const DEFAULT_CENTER = [-93.2011, 41.5868];
-const DEFAULT_ZOOM = 12;
+const DEFAULT_ZOOM = 13;
 
 export default function PassportMap({ stops = [], stamps = [], mapConfig = {} }) {
   const mapContainerRef = useRef(null);
@@ -20,8 +20,15 @@ export default function PassportMap({ stops = [], stamps = [], mapConfig = {} })
 
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
   const mapStyle = mapConfig?.style || "mapbox://styles/mapbox/streets-v12";
-  const mapCenter = mapConfig?.center || DEFAULT_CENTER;
-  const mapZoom = Number.isFinite(mapConfig?.zoom) ? mapConfig.zoom : DEFAULT_ZOOM;
+  const fallbackStop = stops.find(
+    (stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng)
+  );
+  const mapCenter = mapConfig?.center || (fallbackStop ? [fallbackStop.lng, fallbackStop.lat] : DEFAULT_CENTER);
+  const mapZoom = Number.isFinite(mapConfig?.zoom)
+    ? mapConfig.zoom
+    : fallbackStop
+      ? 14
+      : DEFAULT_ZOOM;
 
   useEffect(() => {
     if (!mapboxToken || !mapContainerRef.current || mapRef.current) return;
