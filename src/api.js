@@ -149,6 +149,10 @@ export function lockPassport(id) {
   return apiFetch(`/passports/${id}/lock`, { method: "POST" });
 }
 
+export function deletePassport(id) {
+  return apiFetch(`/passports/${id}`, { method: "DELETE" });
+}
+
 export function createPassportStop(id, data) {
   return apiFetch(`/passports/${id}/stops`, {
     method: "POST",
@@ -185,6 +189,10 @@ export function exportPassportEntriesToWheelspin(passportId, data) {
     method: "POST",
     body: JSON.stringify(data || {})
   });
+}
+
+export function getPassportReport(passportId) {
+  return apiFetch(`/passports/${passportId}/report`);
 }
 
 // ----------------------

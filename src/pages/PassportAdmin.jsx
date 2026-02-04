@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createPassport,
   createPassportStop,
+  deletePassport,
   exportPassportEntriesToWheelspin,
   getEvents,
   getPassport,
   getPassports,
   getPassportStopSuggestions,
+  getPassportReport,
   lockPassport,
   publishPassport,
   updatePassport,
@@ -29,6 +31,7 @@ import {
 import { uploadPublicFile } from "@/lib/uploads";
 import { toast } from "sonner";
 import { Loader2, Upload } from "lucide-react";
+import * as XLSX from "xlsx";
 
 function StopEditor({ stop, onSave }) {
   const [form, setForm] = useState({
@@ -319,6 +322,18 @@ export default function PassportAdmin() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["passport", selectedId] })
   });
 
+  const reportMutation = useMutation({
+    mutationFn: (id) => getPassportReport(id)
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deletePassport(id),
+    onSuccess: () => {
+      setSelectedId(null);
+      queryClient.invalidateQueries({ queryKey: ["passports"] });
+    }
+  });
+
   const selectedPassport = passportDetail?.passport;
   const stops = passportDetail?.stops || [];
   const stats = passportDetail?.stats || {};
@@ -410,6 +425,58 @@ export default function PassportAdmin() {
         sort_order: stopForm.sort_order || 0
       }
     });
+  };
+
+  const handleExportReport = async () => {
+    if (!selectedPassport?.id) return;
+    try {
+      const report = await reportMutation.mutateAsync(selectedPassport.id);
+      const workbook = XLSX.utils.book_new();
+
+      const summaryRows = [
+        {
+          passport_title: report.passport?.title || "",
+          required_stops: report.passport?.required_stops_count ?? "",
+          total_participants: report.summary?.total_participants ?? 0,
+          completed_passports: report.summary?.completed_passports ?? 0,
+          started_not_finished: report.summary?.started_not_finished ?? 0
+        }
+      ];
+      XLSX.utils.book_append_sheet(
+        workbook,
+        XLSX.utils.json_to_sheet(summaryRows),
+        "Summary"
+      );
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        XLSX.utils.json_to_sheet(report.contacts || []),
+        "Contacts"
+      );
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        XLSX.utils.json_to_sheet(report.stop_stats || []),
+        "Stops"
+      );
+
+      if (report.scores && report.scores.length > 0) {
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(report.scores),
+          "Scores"
+        );
+      }
+
+      const safeTitle =
+        (report.passport?.title || "passport-report")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "passport-report";
+      XLSX.writeFile(workbook, `${safeTitle}.xlsx`);
+    } catch (err) {
+      toast.error(err.message || "Failed to export report");
+    }
   };
 
   return (
@@ -643,6 +710,33 @@ export default function PassportAdmin() {
                       disabled={exportWheelMutation.isPending}
                     >
                       Export to WheelSpin
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleExportReport}
+                      disabled={reportMutation.isPending || selectedPassport.status !== "locked"}
+                      title={
+                        selectedPassport.status !== "locked"
+                          ? "Lock entries to export the report"
+                          : "Export report"
+                      }
+                    >
+                      Export report
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Delete this passport? This cannot be undone and will remove all stops, stamps, and entries."
+                          )
+                        ) {
+                          deleteMutation.mutate(selectedPassport.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      Delete passport
                     </Button>
                   </div>
                 </CardContent>
