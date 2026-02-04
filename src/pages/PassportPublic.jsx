@@ -157,31 +157,41 @@ export default function PassportPublic() {
     stampIfNeeded();
   }, [qrToken, bonusToken, instance?.token]);
 
+  const parseScanToken = (decodedText) => {
+    if (!decodedText) return { token: "", isBonus: false };
+    try {
+      const url = new URL(decodedText);
+      let token = "";
+      let isBonus = false;
+      for (const [key, value] of url.searchParams.entries()) {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === "qr") {
+          token = value;
+          break;
+        }
+        if (lowerKey === "bonus") {
+          token = value;
+          isBonus = true;
+          break;
+        }
+      }
+      return { token: token || decodedText, isBonus };
+    } catch {
+      const match = decodedText.match(/[?&](qr|bonus)=([^&]+)/i);
+      if (match) {
+        const isBonus = match[1].toLowerCase() === "bonus";
+        return { token: decodeURIComponent(match[2]), isBonus };
+      }
+      return { token: decodedText, isBonus: false };
+    }
+  };
+
   const handleScanResult = async (decodedText) => {
     if (!instance?.token) return;
     try {
       setScannerStatus("working");
       setScannerMessage("Checking in…");
-      let tokenValue = decodedText;
-      let isBonus = false;
-      if (decodedText.includes("qr=") || decodedText.includes("bonus=")) {
-        try {
-          const url = new URL(decodedText);
-          const qrParam = url.searchParams.get("qr");
-          const bonusParam = url.searchParams.get("bonus");
-          tokenValue = qrParam || bonusParam || decodedText;
-          isBonus = Boolean(bonusParam);
-        } catch {
-          const parts = decodedText.split("qr=");
-          const bonusParts = decodedText.split("bonus=");
-          if (bonusParts.length > 1) {
-            tokenValue = bonusParts[1]?.split("&")[0] || decodedText;
-            isBonus = true;
-          } else {
-            tokenValue = parts[1]?.split("&")[0] || decodedText;
-          }
-        }
-      }
+      const { token: tokenValue, isBonus } = parseScanToken(decodedText);
       await stampPassportInstance(instance.token, {
         ...(isBonus ? { bonus_qr_token: tokenValue } : { qr_token: tokenValue })
       });
