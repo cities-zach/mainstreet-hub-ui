@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 
@@ -7,25 +7,49 @@ export default function PassportQrScanner({ isOpen, onClose, onScan }) {
     () => `passport-qr-${Math.random().toString(36).slice(2, 8)}`,
     []
   );
+  const qrRef = useRef(null);
+  const startedRef = useRef(false);
+  const scanningRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    const qr = new Html5Qrcode(containerId);
+    if (!qrRef.current) {
+      qrRef.current = new Html5Qrcode(containerId);
+    }
+    const qr = qrRef.current;
     let active = true;
 
-    qr.start(
+    startedRef.current = false;
+    qr
+      .start(
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 240, height: 240 } },
       (decodedText) => {
         if (!active) return;
+        if (scanningRef.current) return;
+        scanningRef.current = true;
         onScan(decodedText);
+        setTimeout(() => {
+          scanningRef.current = false;
+        }, 1500);
       },
       () => {}
-    ).catch(() => {});
+    )
+      .then(() => {
+        startedRef.current = true;
+      })
+      .catch(() => {});
 
     return () => {
       active = false;
-      qr.stop().then(() => qr.clear()).catch(() => {});
+      if (!qrRef.current) return;
+      if (startedRef.current) {
+        qr.stop()
+          .then(() => qr.clear())
+          .catch(() => {});
+      } else {
+        qr.clear?.();
+      }
     };
   }, [containerId, isOpen, onScan]);
 

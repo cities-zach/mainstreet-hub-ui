@@ -4,6 +4,7 @@ import {
   createPassportInstance,
   getPassportInstance,
   getPublicPassport,
+  getPublicSystemSettings,
   stampPassportInstance,
   updatePassportInstance
 } from "@/api";
@@ -13,11 +14,14 @@ import { Input } from "@/components/ui/input";
 import PassportMap from "@/components/passport/PassportMap";
 import PassportQrScanner from "@/components/passport/PassportQrScanner";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
+import { useRef } from "react";
 
 export default function PassportPublic() {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const qrToken = searchParams.get("qr");
+  const bonusToken = searchParams.get("bonus");
   const tokenKey = slug ? `passport_token_${slug}` : "passport_token";
 
   const [passport, setPassport] = useState(null);
@@ -37,6 +41,11 @@ export default function PassportPublic() {
     contact_phone: ""
   });
   const [contactSaved, setContactSaved] = useState(false);
+  const [soundSettings, setSoundSettings] = useState({
+    task_completion_sound_url: "",
+    level_up_sound_url: ""
+  });
+  const completedOnceRef = useRef(false);
 
   const visitedStopIds = useMemo(
     () => new Set(stamps.map((stamp) => stamp.stop_id)),
@@ -54,6 +63,16 @@ export default function PassportPublic() {
         if (!isMounted) return;
         setPassport(passportData.passport);
         setStops(passportData.stops || []);
+
+        getPublicSystemSettings()
+          .then((settings) => {
+            if (!isMounted || !settings) return;
+            setSoundSettings({
+              task_completion_sound_url: settings.task_completion_sound_url || "",
+              level_up_sound_url: settings.level_up_sound_url || ""
+            });
+          })
+          .catch(() => {});
 
         const existingToken =
           typeof window !== "undefined" ? localStorage.getItem(tokenKey) : null;
@@ -102,9 +121,11 @@ export default function PassportPublic() {
 
   useEffect(() => {
     const stampIfNeeded = async () => {
-      if (!qrToken || !instance?.token) return;
+      if ((!qrToken && !bonusToken) || !instance?.token) return;
       try {
-        await stampPassportInstance(instance.token, { qr_token: qrToken });
+        await stampPassportInstance(instance.token, {
+          ...(bonusToken ? { bonus_qr_token: bonusToken } : { qr_token: qrToken })
+        });
         const detail = await getPassportInstance(instance.token);
         setStamps(detail.stamps || []);
         setEntryCount(detail.entry_count || 0);
@@ -114,6 +135,7 @@ export default function PassportPublic() {
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete("qr");
+          next.delete("bonus");
           return next;
         });
       } catch (err) {
@@ -123,12 +145,13 @@ export default function PassportPublic() {
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete("qr");
+          next.delete("bonus");
           return next;
         });
       }
     };
     stampIfNeeded();
-  }, [qrToken, instance?.token]);
+  }, [qrToken, bonusToken, instance?.token]);
 
   const handleScanResult = async (decodedText) => {
     if (!instance?.token) return;
@@ -136,27 +159,51 @@ export default function PassportPublic() {
       setScannerStatus("working");
       setScannerMessage("Checking in…");
       let tokenValue = decodedText;
-      if (decodedText.includes("qr=")) {
+      let isBonus = false;
+      if (decodedText.includes("qr=") || decodedText.includes("bonus=")) {
         try {
           const url = new URL(decodedText);
-          tokenValue = url.searchParams.get("qr") || decodedText;
+          const qrParam = url.searchParams.get("qr");
+          const bonusParam = url.searchParams.get("bonus");
+          tokenValue = qrParam || bonusParam || decodedText;
+          isBonus = Boolean(bonusParam);
         } catch {
           const parts = decodedText.split("qr=");
-          tokenValue = parts[1]?.split("&")[0] || decodedText;
+          const bonusParts = decodedText.split("bonus=");
+          if (bonusParts.length > 1) {
+            tokenValue = bonusParts[1]?.split("&")[0] || decodedText;
+            isBonus = true;
+          } else {
+            tokenValue = parts[1]?.split("&")[0] || decodedText;
+          }
         }
       }
-      await stampPassportInstance(instance.token, { qr_token: tokenValue });
+      await stampPassportInstance(instance.token, {
+        ...(isBonus ? { bonus_qr_token: tokenValue } : { qr_token: tokenValue })
+      });
       const detail = await getPassportInstance(instance.token);
       setStamps(detail.stamps || []);
       setEntryCount(detail.entry_count || 0);
       setStops(detail.stops || []);
       setScannerStatus("success");
-      setScannerMessage("Stamp recorded! Nice work.");
+      setScannerMessage(isBonus ? "Bonus entry added!" : "Stamp recorded! Nice work.");
       toast.success("Stamp recorded!");
+      if (soundSettings.task_completion_sound_url && !isBonus) {
+        new Audio(soundSettings.task_completion_sound_url).play().catch(() => {});
+      }
       setActiveTab("stops");
     } catch (err) {
+      const raw = err.message || "Unable to record stamp.";
+      let message = raw;
+      if (raw.toLowerCase().includes("already stamped")) {
+        message = "You already checked in at this stop.";
+      } else if (raw.toLowerCase().includes("stop not found")) {
+        message = "That QR code doesn't match this passport.";
+      } else if (raw.toLowerCase().includes("bonus entries")) {
+        message = "Bonus entries are not enabled for this passport.";
+      }
       setScannerStatus("error");
-      setScannerMessage(err.message || "Unable to record stamp.");
+      setScannerMessage(message);
     }
   };
 
@@ -192,6 +239,20 @@ export default function PassportPublic() {
   const completedCount = visitedStopIds.size;
   const totalStops = stops.length;
   const requireContact = passport.require_contact;
+  const requiredStops =
+    passport.required_stops_count == null ? totalStops : passport.required_stops_count;
+  const progressValue =
+    requiredStops > 0 ? Math.min(100, Math.round((completedCount / requiredStops) * 100)) : 0;
+  const isComplete = requiredStops > 0 && completedCount >= requiredStops;
+
+  useEffect(() => {
+    if (isComplete && !completedOnceRef.current) {
+      completedOnceRef.current = true;
+      if (soundSettings.level_up_sound_url) {
+        new Audio(soundSettings.level_up_sound_url).play().catch(() => {});
+      }
+    }
+  }, [isComplete, soundSettings.level_up_sound_url]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -201,9 +262,17 @@ export default function PassportPublic() {
             <CardTitle>{passport.title}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            {passport.banner_url && (
+              <img
+                src={passport.banner_url}
+                alt={`${passport.title} banner`}
+                className="w-full h-40 rounded-xl object-cover border"
+              />
+            )}
             <div className="text-sm text-slate-600">
-              Progress: {completedCount}/{totalStops} stops completed
+              Progress: {completedCount}/{requiredStops || totalStops} stops completed
             </div>
+            <Progress value={progressValue} />
             <div className="text-sm text-slate-600">
               Prize entries earned: {entryCount}
             </div>

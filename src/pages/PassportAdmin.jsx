@@ -191,6 +191,7 @@ export default function PassportAdmin() {
   const [form, setForm] = useState({
     title: "",
     event_id: "",
+    banner_url: "",
     entries_per_required_stops: 1,
     required_stops_count: "",
     allow_extra_entries: false,
@@ -210,6 +211,7 @@ export default function PassportAdmin() {
   const [stopSuggestions, setStopSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [uploadingStopLogo, setUploadingStopLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
 
   const { data: passports = [], isLoading } = useQuery({
     queryKey: ["passports"],
@@ -258,6 +260,7 @@ export default function PassportAdmin() {
       setForm({
         title: "",
         event_id: "",
+        banner_url: "",
         entries_per_required_stops: 1,
         required_stops_count: "",
         allow_extra_entries: false,
@@ -356,6 +359,33 @@ export default function PassportAdmin() {
     }
   };
 
+  const handleBannerUpload = async (event, { applyToSelected = false } = {}) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setUploadingBanner(true);
+      const result = await uploadPublicFile({
+        bucket: "uploads",
+        pathPrefix: "passport-banners",
+        file
+      });
+      if (applyToSelected && selectedPassport?.id) {
+        updateMutation.mutate({
+          id: selectedPassport.id,
+          data: { banner_url: result.file_url }
+        });
+      } else {
+        setForm((prev) => ({ ...prev, banner_url: result.file_url }));
+      }
+      toast.success("Banner uploaded");
+    } catch (err) {
+      toast.error(err.message || "Failed to upload banner");
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
   const applySuggestion = (suggestion) => {
     setStopForm((prev) => ({
       ...prev,
@@ -424,6 +454,49 @@ export default function PassportAdmin() {
                 value={form.title}
                 onChange={(event) => setForm({ ...form, title: event.target.value })}
               />
+              <div className="space-y-2">
+                <Input
+                  placeholder="Banner image URL"
+                  value={form.banner_url}
+                  onChange={(event) =>
+                    setForm({ ...form, banner_url: event.target.value })
+                  }
+                />
+                <div className="text-xs text-slate-500">
+                  Recommended banner size: 1200 × 600 (mobile-friendly).
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingBanner}
+                    onClick={() =>
+                      document.getElementById("passport-banner-upload")?.click()
+                    }
+                  >
+                    {uploadingBanner ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    <span className="ml-2">Upload banner</span>
+                  </Button>
+                  {form.banner_url && (
+                    <img
+                      src={form.banner_url}
+                      alt="Passport banner"
+                      className="h-12 w-24 rounded-md object-cover border"
+                    />
+                  )}
+                  <input
+                    id="passport-banner-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => handleBannerUpload(event)}
+                  />
+                </div>
+              </div>
               <select
                 value={form.event_id}
                 onChange={(event) => setForm({ ...form, event_id: event.target.value })}
@@ -510,6 +583,45 @@ export default function PassportAdmin() {
                       <div className="font-medium break-all">{publicUrl}</div>
                     </div>
                   )}
+                  <div className="rounded-xl border p-3 text-sm space-y-2">
+                    <div className="text-slate-500">Passport banner</div>
+                    {selectedPassport.banner_url && (
+                      <img
+                        src={selectedPassport.banner_url}
+                        alt="Passport banner"
+                        className="h-24 w-full rounded-lg object-cover border"
+                      />
+                    )}
+                    <div className="text-xs text-slate-500">
+                      Recommended banner size: 1200 × 600 (mobile-friendly).
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingBanner}
+                        onClick={() =>
+                          document.getElementById("passport-banner-upload-edit")?.click()
+                        }
+                      >
+                        {uploadingBanner ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4" />
+                        )}
+                        <span className="ml-2">Upload banner</span>
+                      </Button>
+                      <input
+                        id="passport-banner-upload-edit"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) =>
+                          handleBannerUpload(event, { applyToSelected: true })
+                        }
+                      />
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
@@ -676,8 +788,11 @@ export default function PassportAdmin() {
                           />
                         </div>
                         {selectedPassport.public_slug && (
-                          <div className="text-xs text-slate-500 break-all">
-                            QR link: {`${publicUrl}?qr=${stop.qr_token}`}
+                          <div className="text-xs text-slate-500 break-all space-y-1">
+                            <div>Stamp QR: {`${publicUrl}?qr=${stop.qr_token}`}</div>
+                            {stop.bonus_qr_token && (
+                              <div>Bonus QR: {`${publicUrl}?bonus=${stop.bonus_qr_token}`}</div>
+                            )}
                           </div>
                         )}
                       </div>

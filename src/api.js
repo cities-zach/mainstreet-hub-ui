@@ -103,6 +103,10 @@ export function getNotifications({ unreadOnly = false, limit = 50 } = {}) {
   return apiFetch(`/notifications${suffix ? `?${suffix}` : ""}`);
 }
 
+export function getPublicSystemSettings() {
+  return apiFetch("/system/settings/public");
+}
+
 export function markNotificationRead(id) {
   return apiFetch(`/notifications/${id}/read`, { method: "POST" });
 }
