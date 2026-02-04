@@ -43,13 +43,11 @@ export default function PassportQrScanner({ isOpen, onClose, onScan }) {
     return () => {
       active = false;
       if (!qrRef.current) return;
-      if (startedRef.current) {
-        qr.stop()
-          .then(() => qr.clear())
-          .catch(() => {});
-      } else {
-        qr.clear?.();
-      }
+      qr.stop()
+        .then(() => qr.clear())
+        .catch(() => {
+          // If stop fails, avoid calling clear to prevent crashes.
+        });
     };
   }, [containerId, isOpen, onScan]);
 

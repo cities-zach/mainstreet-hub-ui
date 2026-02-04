@@ -139,8 +139,12 @@ export default function PassportPublic() {
           return next;
         });
       } catch (err) {
+        const raw = err.message || "Unable to record stamp.";
+        const message = raw.includes("HTTP 404")
+          ? "Stamping is temporarily unavailable. Please try again in a moment."
+          : raw;
         setScannerStatus("error");
-        setScannerMessage(err.message || "Unable to record stamp.");
+        setScannerMessage(message);
         setActiveTab("scanner");
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
@@ -201,6 +205,8 @@ export default function PassportPublic() {
         message = "That QR code doesn't match this passport.";
       } else if (raw.toLowerCase().includes("bonus entries")) {
         message = "Bonus entries are not enabled for this passport.";
+      } else if (raw.includes("HTTP 404")) {
+        message = "Stamping is temporarily unavailable. Please try again in a moment.";
       }
       setScannerStatus("error");
       setScannerMessage(message);
