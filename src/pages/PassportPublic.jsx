@@ -12,12 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import PassportMap from "@/components/passport/PassportMap";
 import PassportQrScanner from "@/components/passport/PassportQrScanner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 export default function PassportPublic() {
   const { slug } = useParams();
@@ -32,13 +27,16 @@ export default function PassportPublic() {
   const [entryCount, setEntryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showMap, setShowMap] = useState(false);
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("stops");
+  const [scannerStatus, setScannerStatus] = useState(null);
+  const [scannerMessage, setScannerMessage] = useState("");
+  const [selectedStop, setSelectedStop] = useState(null);
   const [contactForm, setContactForm] = useState({
     contact_name: "",
     contact_email: "",
     contact_phone: ""
   });
+  const [contactSaved, setContactSaved] = useState(false);
 
   const visitedStopIds = useMemo(
     () => new Set(stamps.map((stamp) => stamp.stop_id)),
@@ -80,6 +78,14 @@ export default function PassportPublic() {
             contact_email: detail.instance.contact_email || "",
             contact_phone: detail.instance.contact_phone || ""
           });
+          const hasContact =
+            detail.instance.contact_name ||
+            detail.instance.contact_email ||
+            detail.instance.contact_phone;
+          setContactSaved(Boolean(hasContact));
+        }
+        if (!selectedStop && (detail.stops || []).length > 0) {
+          setSelectedStop(detail.stops[0]);
         }
       } catch (err) {
         if (!isMounted) return;
@@ -103,13 +109,22 @@ export default function PassportPublic() {
         setStamps(detail.stamps || []);
         setEntryCount(detail.entry_count || 0);
         setStops(detail.stops || []);
+        toast.success("Stamp recorded!");
+        setActiveTab("stops");
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete("qr");
           return next;
         });
       } catch (err) {
-        setError(err.message);
+        setScannerStatus("error");
+        setScannerMessage(err.message || "Unable to record stamp.");
+        setActiveTab("scanner");
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("qr");
+          return next;
+        });
       }
     };
     stampIfNeeded();
@@ -118,6 +133,8 @@ export default function PassportPublic() {
   const handleScanResult = async (decodedText) => {
     if (!instance?.token) return;
     try {
+      setScannerStatus("working");
+      setScannerMessage("Checking in…");
       let tokenValue = decodedText;
       if (decodedText.includes("qr=")) {
         try {
@@ -133,19 +150,32 @@ export default function PassportPublic() {
       setStamps(detail.stamps || []);
       setEntryCount(detail.entry_count || 0);
       setStops(detail.stops || []);
-      setScannerOpen(false);
+      setScannerStatus("success");
+      setScannerMessage("Stamp recorded! Nice work.");
+      toast.success("Stamp recorded!");
+      setActiveTab("stops");
     } catch (err) {
-      setError(err.message);
+      setScannerStatus("error");
+      setScannerMessage(err.message || "Unable to record stamp.");
     }
   };
 
   const handleContactSave = async () => {
     if (!instance?.token) return;
+    const hasContact =
+      contactForm.contact_name || contactForm.contact_email || contactForm.contact_phone;
+    if (!hasContact) {
+      toast.error("Please enter at least one contact detail.");
+      return;
+    }
     try {
       const res = await updatePassportInstance(instance.token, contactForm);
       setInstance(res.instance);
+      setContactSaved(true);
+      toast.success("Contact info saved.");
+      setActiveTab("stops");
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message || "Unable to save contact info.");
     }
   };
 
@@ -161,6 +191,7 @@ export default function PassportPublic() {
 
   const completedCount = visitedStopIds.size;
   const totalStops = stops.length;
+  const requireContact = passport.require_contact;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -179,7 +210,7 @@ export default function PassportPublic() {
           </CardContent>
         </Card>
 
-        {passport.require_contact && (
+        {requireContact && !contactSaved && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Your contact info</CardTitle>
@@ -211,68 +242,169 @@ export default function PassportPublic() {
           </Card>
         )}
 
-        <div className="flex gap-2">
-          <Button variant={showMap ? "outline" : "default"} onClick={() => setShowMap(false)}>
-            List view
-          </Button>
-          <Button variant={showMap ? "default" : "outline"} onClick={() => setShowMap(true)}>
-            Map view
-          </Button>
-          <Button variant="outline" onClick={() => setScannerOpen(true)}>
-            Scan QR
-          </Button>
-        </div>
+        {(!requireContact || contactSaved) && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={activeTab === "stops" ? "default" : "outline"}
+              onClick={() => setActiveTab("stops")}
+            >
+              Stops
+            </Button>
+            <Button
+              variant={activeTab === "map" ? "default" : "outline"}
+              onClick={() => setActiveTab("map")}
+            >
+              Map
+            </Button>
+            <Button
+              variant={activeTab === "scanner" ? "default" : "outline"}
+              onClick={() => setActiveTab("scanner")}
+            >
+              Scanner
+            </Button>
+          </div>
+        )}
 
-        <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>Scan a passport QR code</DialogTitle>
-            </DialogHeader>
-            <PassportQrScanner
-              isOpen={scannerOpen}
-              onClose={() => setScannerOpen(false)}
-              onScan={handleScanResult}
-            />
-          </DialogContent>
-        </Dialog>
-
-        {showMap ? (
-          <PassportMap stops={stops} stamps={stamps} mapConfig={passport.map_config} />
-        ) : (
+        {(!requireContact || contactSaved) && activeTab === "stops" && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Stops</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {stops.map((stop) => {
-                const visited = visitedStopIds.has(stop.id);
-                return (
-                  <div
-                    key={stop.id}
-                    className={`rounded-xl border p-3 ${
-                      visited ? "border-[#2d4650] bg-[#2d4650]/5" : "border-slate-200"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{stop.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {stop.address_text || "No address"}
+            <CardContent className="grid md:grid-cols-[1fr_320px] gap-4">
+              <div className="space-y-3">
+                {stops.map((stop) => {
+                  const visited = visitedStopIds.has(stop.id);
+                  return (
+                    <button
+                      type="button"
+                      key={stop.id}
+                      onClick={() => setSelectedStop(stop)}
+                      className={`w-full rounded-xl border p-3 text-left ${
+                        visited ? "border-[#2d4650] bg-[#2d4650]/5" : "border-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {stop.logo_url ? (
+                          <img
+                            src={stop.logo_url}
+                            alt={stop.name}
+                            className="h-10 w-10 rounded-full object-cover border"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-[#835879]/10 flex items-center justify-center text-[#835879] font-semibold">
+                            {stop.name.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="font-medium">{stop.name}</div>
+                          <div className="text-xs text-slate-500">
+                            {stop.address_text || "No address"}
+                          </div>
+                        </div>
+                        <div className="text-xs font-semibold">
+                          {visited ? "Completed" : "Not yet"}
                         </div>
                       </div>
-                      <div className="text-xs font-semibold">
-                        {visited ? "Completed" : "Not yet"}
-                      </div>
-                    </div>
-                    {stop.special_text && (
-                      <div className="text-xs text-slate-600 mt-2">{stop.special_text}</div>
+                    </button>
+                  );
+                })}
+                {stops.length === 0 && (
+                  <div className="text-sm text-slate-500">No stops available.</div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-3 space-y-3">
+                <div className="text-sm font-semibold">Stop details</div>
+                {selectedStop ? (
+                  <>
+                    {selectedStop.logo_url && (
+                      <img
+                        src={selectedStop.logo_url}
+                        alt={selectedStop.name}
+                        className="h-20 w-20 rounded-full object-cover border"
+                      />
                     )}
+                    <div className="font-medium">{selectedStop.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {selectedStop.address_text || "No address"}
+                    </div>
+                    {selectedStop.special_text && (
+                      <div className="text-xs text-slate-600">
+                        {selectedStop.special_text}
+                      </div>
+                    )}
+                    <Button onClick={() => setActiveTab("scanner")}>Open scanner</Button>
+                  </>
+                ) : (
+                  <div className="text-xs text-slate-500">
+                    Select a stop to view details.
                   </div>
-                );
-              })}
-              {stops.length === 0 && (
-                <div className="text-sm text-slate-500">No stops available.</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {(!requireContact || contactSaved) && activeTab === "map" && (
+          <div className="space-y-3">
+            <PassportMap
+              stops={stops}
+              stamps={stamps}
+              mapConfig={passport.map_config}
+              onSelectStop={(stop) => {
+                setSelectedStop(stop);
+              }}
+            />
+            {selectedStop && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Selected stop</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="font-medium">{selectedStop.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {selectedStop.address_text || "No address"}
+                  </div>
+                  {selectedStop.special_text && (
+                    <div className="text-xs text-slate-600">
+                      {selectedStop.special_text}
+                    </div>
+                  )}
+                  <Button onClick={() => setActiveTab("scanner")}>Open scanner</Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {(!requireContact || contactSaved) && activeTab === "scanner" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Scanner</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {scannerMessage && (
+                <div
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    scannerStatus === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : scannerStatus === "error"
+                        ? "border-rose-200 bg-rose-50 text-rose-700"
+                        : "border-slate-200 bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  {scannerMessage}
+                </div>
               )}
+              <PassportQrScanner
+                isOpen={activeTab === "scanner"}
+                onClose={() => {
+                  setActiveTab("stops");
+                  setScannerStatus(null);
+                  setScannerMessage("");
+                }}
+                onScan={handleScanResult}
+              />
             </CardContent>
           </Card>
         )}

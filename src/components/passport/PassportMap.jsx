@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 const DEFAULT_CENTER = [-93.2011, 41.5868];
 const DEFAULT_ZOOM = 13;
 
-export default function PassportMap({ stops = [], stamps = [], mapConfig = {} }) {
+export default function PassportMap({
+  stops = [],
+  stamps = [],
+  mapConfig = {},
+  onSelectStop
+}) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -64,6 +69,9 @@ export default function PassportMap({ stops = [], stamps = [], mapConfig = {} })
           )
         )
         .addTo(map);
+      if (onSelectStop) {
+        marker.getElement().addEventListener("click", () => onSelectStop(stop));
+      }
       markersRef.current.push(marker);
       bounds.extend([stop.lng, stop.lat]);
       hasBounds = true;
