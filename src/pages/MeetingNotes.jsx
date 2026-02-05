@@ -51,6 +51,8 @@ const fileToText = (file) =>
     reader.readAsText(file);
   });
 
+const MAX_TRANSCRIBE_BYTES = 75 * 1024 * 1024;
+
 export default function MeetingNotes() {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
@@ -60,7 +62,7 @@ export default function MeetingNotes() {
   const [decisions, setDecisions] = useState([]);
   const [taskSuggestions, setTaskSuggestions] = useState([]);
   const [meetingSearch, setMeetingSearch] = useState("");
-  const [runTranscript, setRunTranscript] = useState(true);
+  const [runTranscript, setRunTranscript] = useState(false);
   const [runSummary, setRunSummary] = useState(true);
   const [runError, setRunError] = useState("");
   const [openAssigneeIndex, setOpenAssigneeIndex] = useState(null);
@@ -98,11 +100,11 @@ export default function MeetingNotes() {
     mutationFn: async () => {
       if (!title.trim()) throw new Error("Meeting title is required.");
       if (!audioFile) throw new Error("Please upload an audio file.");
+      if (audioFile.size > MAX_TRANSCRIBE_BYTES) {
+        throw new Error("Audio must be under 75MB. Please split or compress it.");
+      }
       if (!runTranscript && !runSummary) {
         throw new Error("Select transcript, summary, or both.");
-      }
-      if (runSummary && !runTranscript) {
-        throw new Error("Summary requires transcript.");
       }
 
       const created = await apiFetch("/ai/meetings", {
@@ -111,9 +113,16 @@ export default function MeetingNotes() {
       });
 
       setSelectedMeetingId(created.id);
+      let audio_base64;
+      const getAudioBase64 = async () => {
+        if (!audio_base64) {
+          audio_base64 = await fileToBase64(audioFile);
+        }
+        return audio_base64;
+      };
 
       if (runTranscript) {
-        const audio_base64 = await fileToBase64(audioFile);
+        const audio_base64 = await getAudioBase64();
         const transcribed = await apiFetch(`/ai/meetings/${created.id}/transcribe`, {
           method: "POST",
           body: JSON.stringify({
@@ -126,9 +135,18 @@ export default function MeetingNotes() {
       }
 
       if (runSummary) {
+        const payload = runTranscript
+          ? { agenda: agendaText }
+          : {
+              agenda: agendaText,
+              audio_base64: await getAudioBase64(),
+              file_name: audioFile.name,
+              mime_type: audioFile.type,
+              save_transcript: false,
+            };
         const note = await apiFetch(`/ai/meetings/${created.id}/summarize`, {
           method: "POST",
-          body: JSON.stringify({ agenda: agendaText }),
+          body: JSON.stringify(payload),
         });
         setNoteSummary(note.summary || "");
         setDecisions(note.decisions || []);
@@ -249,6 +267,10 @@ export default function MeetingNotes() {
                   accept="audio/*"
                   onChange={(event) => setAudioFile(event.target.files?.[0] || null)}
                 />
+                <p className="text-xs text-slate-500">
+                  Summary-only is best for most meetings. Large recordings cost more to
+                  transcribe. Practical upload limit: 75MB.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Agenda (optional)</Label>
@@ -301,6 +323,9 @@ export default function MeetingNotes() {
                     Summary
                   </label>
                 </div>
+                <p className="text-xs text-slate-500">
+                  Summary runs by default. Only enable Transcript when you need the full text.
+                </p>
               </div>
               {runError && <p className="text-sm text-rose-500">{runError}</p>}
               <Button
