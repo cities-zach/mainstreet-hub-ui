@@ -10,7 +10,9 @@ export default function PassportMap({
   stops = [],
   stamps = [],
   mapConfig = {},
-  onSelectStop
+  onSelectStop,
+  showControls = true,
+  heightClass = "h-[420px]"
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -116,16 +118,20 @@ export default function PassportMap({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-slate-600">Passport stops map</div>
-        <Button variant="outline" size="sm" onClick={handleLocate}>
-          Use my location
-        </Button>
-      </div>
-      {locationError && <div className="text-xs text-red-500">{locationError}</div>}
+      {showControls && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-600">Passport stops map</div>
+          <Button variant="outline" size="sm" onClick={handleLocate}>
+            Use my location
+          </Button>
+        </div>
+      )}
+      {showControls && locationError && (
+        <div className="text-xs text-red-500">{locationError}</div>
+      )}
       <div
         ref={mapContainerRef}
-        className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200"
+        className={`${heightClass} w-full overflow-hidden rounded-2xl border border-slate-200`}
       />
     </div>
   );

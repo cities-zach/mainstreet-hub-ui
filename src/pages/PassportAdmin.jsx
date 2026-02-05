@@ -5,6 +5,7 @@ import {
   createPassportStop,
   deletePassport,
   exportPassportEntriesToWheelspin,
+  geocodeAddress,
   getEvents,
   getPassport,
   getPassports,
@@ -32,8 +33,10 @@ import { uploadPublicFile } from "@/lib/uploads";
 import { toast } from "sonner";
 import { Loader2, Upload } from "lucide-react";
 import * as XLSX from "xlsx";
+import PassportMap from "@/components/passport/PassportMap";
 
 function StopEditor({ stop, onSave }) {
+  const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: stop.name || "",
     address_text: stop.address_text || "",
@@ -67,8 +70,15 @@ function StopEditor({ stop, onSave }) {
     }
   };
 
+  const handleSave = async () => {
+    const ok = await onSave(form);
+    if (ok !== false) {
+      setOpen(false);
+    }
+  };
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           Edit
@@ -181,7 +191,7 @@ function StopEditor({ stop, onSave }) {
           />
         </div>
         <DialogFooter>
-          <Button onClick={() => onSave(form)}>Save changes</Button>
+          <Button onClick={handleSave}>Save changes</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -215,6 +225,7 @@ export default function PassportAdmin() {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [uploadingStopLogo, setUploadingStopLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [locatingStop, setLocatingStop] = useState(false);
 
   const { data: passports = [], isLoading } = useQuery({
     queryKey: ["passports"],
@@ -284,6 +295,7 @@ export default function PassportAdmin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["passports"] });
       queryClient.invalidateQueries({ queryKey: ["passport", selectedId] });
+      toast.success("Passport published");
     }
   });
 
@@ -398,6 +410,29 @@ export default function PassportAdmin() {
       toast.error(err.message || "Failed to upload banner");
     } finally {
       setUploadingBanner(false);
+    }
+  };
+
+  const handleAutoLocate = async () => {
+    const address = (stopForm.address_text || "").trim();
+    if (!address) {
+      toast.error("Enter an address to locate.");
+      return;
+    }
+    try {
+      setLocatingStop(true);
+      const result = await geocodeAddress(address);
+      setStopForm((prev) => ({
+        ...prev,
+        lat: result.lat ?? prev.lat,
+        lng: result.lng ?? prev.lng,
+        address_text: result.place_name || prev.address_text
+      }));
+      toast.success("Location updated from Mapbox");
+    } catch (err) {
+      toast.error(err.message || "Unable to locate address");
+    } finally {
+      setLocatingStop(false);
     }
   };
 
@@ -630,6 +665,17 @@ export default function PassportAdmin() {
                   <CardTitle className="text-lg">Passport overview</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-slate-500">Status:</span>
+                    <span className="rounded-full px-3 py-1 bg-slate-100 text-slate-700 capitalize">
+                      {selectedPassport.status || "draft"}
+                    </span>
+                    {selectedPassport.status === "published" && (
+                      <span className="rounded-full px-3 py-1 bg-emerald-100 text-emerald-700">
+                        Live
+                      </span>
+                    )}
+                  </div>
                   <div className="grid md:grid-cols-3 gap-3">
                     <div className="rounded-xl border p-3 text-sm">
                       <div className="text-slate-500">Participants</div>
@@ -800,6 +846,38 @@ export default function PassportAdmin() {
                         }
                       />
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={locatingStop}
+                        onClick={handleAutoLocate}
+                      >
+                        {locatingStop ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          "Auto-locate"
+                        )}
+                      </Button>
+                      <div className="text-xs text-slate-500">
+                        Uses Mapbox to locate the address.
+                      </div>
+                    </div>
+                    <PassportMap
+                      stops={[
+                        {
+                          id: "preview",
+                          name: stopForm.name || "Stop preview",
+                          address_text: stopForm.address_text,
+                          lat: stopForm.lat ? Number(stopForm.lat) : null,
+                          lng: stopForm.lng ? Number(stopForm.lng) : null
+                        }
+                      ]}
+                      stamps={[]}
+                      mapConfig={{}}
+                      showControls={false}
+                      heightClass="h-[220px]"
+                    />
                     <Input
                       placeholder="Logo URL"
                       value={stopForm.logo_url}
@@ -872,13 +950,14 @@ export default function PassportAdmin() {
                           </div>
                           <StopEditor
                             stop={stop}
-                            onSave={(data) =>
-                              updateStopMutation.mutate({
+                            onSave={async (data) => {
+                              await updateStopMutation.mutateAsync({
                                 passportId: selectedPassport.id,
                                 stopId: stop.id,
                                 data
-                              })
-                            }
+                              });
+                              return true;
+                            }}
                           />
                         </div>
                         {selectedPassport.public_slug && (

@@ -356,14 +356,14 @@ export default function PassportPublic() {
             <CardHeader>
               <CardTitle className="text-base">Stops</CardTitle>
             </CardHeader>
-            <CardContent className="grid md:grid-cols-[1fr_320px] gap-4">
-              <div className="space-y-3">
-                {stops.map((stop) => {
-                  const visited = visitedStopIds.has(stop.id);
-                  return (
+            <CardContent className="space-y-3">
+              {stops.map((stop) => {
+                const visited = visitedStopIds.has(stop.id);
+                const isSelected = selectedStop?.id === stop.id;
+                return (
+                  <div key={stop.id} className="space-y-2">
                     <button
                       type="button"
-                      key={stop.id}
                       onClick={() => setSelectedStop(stop)}
                       className={`w-full rounded-xl border p-3 text-left ${
                         visited ? "border-[#2d4650] bg-[#2d4650]/5" : "border-slate-200"
@@ -392,41 +392,36 @@ export default function PassportPublic() {
                         </div>
                       </div>
                     </button>
-                  );
-                })}
-                {stops.length === 0 && (
-                  <div className="text-sm text-slate-500">No stops available.</div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-3 space-y-3">
-                <div className="text-sm font-semibold">Stop details</div>
-                {selectedStop ? (
-                  <>
-                    {selectedStop.logo_url && (
-                      <img
-                        src={selectedStop.logo_url}
-                        alt={selectedStop.name}
-                        className="h-20 w-20 rounded-full object-cover border"
-                      />
-                    )}
-                    <div className="font-medium">{selectedStop.name}</div>
-                    <div className="text-xs text-slate-500">
-                      {selectedStop.address_text || "No address"}
-                    </div>
-                    {selectedStop.special_text && (
-                      <div className="text-xs text-slate-600">
-                        {selectedStop.special_text}
+                    {isSelected && (
+                      <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+                        <div className="text-sm font-semibold">Stop details</div>
+                        {stop.logo_url && (
+                          <img
+                            src={stop.logo_url}
+                            alt={stop.name}
+                            className="h-20 w-20 rounded-full object-cover border"
+                          />
+                        )}
+                        <div className="font-medium">{stop.name}</div>
+                        <div className="text-xs text-slate-500">
+                          {stop.address_text || "No address"}
+                        </div>
+                        {stop.special_text && (
+                          <div className="text-xs text-slate-600">
+                            {stop.special_text}
+                          </div>
+                        )}
+                        <Button onClick={() => setActiveTab("scanner")}>
+                          Go to scanner
+                        </Button>
                       </div>
                     )}
-                    <Button onClick={() => setActiveTab("scanner")}>Open scanner</Button>
-                  </>
-                ) : (
-                  <div className="text-xs text-slate-500">
-                    Select a stop to view details.
                   </div>
-                )}
-              </div>
+                );
+              })}
+              {stops.length === 0 && (
+                <div className="text-sm text-slate-500">No stops available.</div>
+              )}
             </CardContent>
           </Card>
         )}

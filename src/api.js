@@ -195,6 +195,13 @@ export function getPassportReport(passportId) {
   return apiFetch(`/passports/${passportId}/report`);
 }
 
+export function geocodeAddress(address) {
+  return apiFetch("/map/geocode", {
+    method: "POST",
+    body: JSON.stringify({ address })
+  });
+}
+
 // ----------------------
 // Passport (public)
 // ----------------------

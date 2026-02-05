@@ -126,15 +126,14 @@ export default function AppShell({ me }) {
 
         <Link
           to="/"
-          className="hidden md:flex items-center gap-2 text-[#2d4650]"
+          className="hidden md:flex items-center justify-center text-[#2d4650]"
+          aria-label="MainSuite Dashboard"
         >
-          <div className="w-9 h-9 rounded-xl bg-[#835879]/15 flex items-center justify-center text-[#835879] font-bold">
-            MS
-          </div>
-          <div>
-            <div className="text-xs text-slate-500">MainSuite</div>
-            <div className="font-semibold">Dashboard</div>
-          </div>
+          <img
+            src="/logo.png"
+            alt="MainSuite logo"
+            className="h-10 w-auto object-contain"
+          />
         </Link>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
