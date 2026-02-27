@@ -13,6 +13,7 @@ export default function Login() {
   const [mode, setMode] = useState("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [status, setStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
@@ -32,6 +33,13 @@ export default function Login() {
         if (error) throw error;
         navigate("/", { replace: true });
       } else {
+        if (!fullName.trim()) {
+          setStatus({
+            type: "error",
+            message: "Please enter your full name.",
+          });
+          return;
+        }
         if (!acceptedPrivacy || !acceptedTerms) {
           setStatus({
             type: "error",
@@ -42,6 +50,7 @@ export default function Login() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: { data: { full_name: fullName.trim() } },
         });
         if (error) throw error;
         await apiFetch("/policies/accept", { method: "POST" });
@@ -50,6 +59,7 @@ export default function Login() {
           message: "Account created. You can now sign in.",
         });
         setMode("sign_in");
+        setFullName("");
       }
     } catch (error) {
       setStatus({
@@ -91,6 +101,17 @@ export default function Login() {
                 required
               />
             </div>
+            {mode === "sign_up" && (
+              <div>
+                <Label>Full name</Label>
+                <Input
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  placeholder="Full name"
+                  required
+                />
+              </div>
+            )}
             {mode === "sign_up" && (
               <div className="space-y-3 text-sm text-slate-600">
                 <label className="flex items-start gap-3">

@@ -49,6 +49,7 @@ import UserManagement from "@/pages/UserManagement";
 import AiSessions from "@/pages/AiSessions";
 import AppShell from "@/components/layout/AppShell";
 import PolicyAcceptanceModal from "@/components/policies/PolicyAcceptanceModal";
+import NamePromptModal from "@/components/users/NamePromptModal";
 import Login from "@/pages/Login";
 import InviteAccept from "@/pages/InviteAccept";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
@@ -156,6 +157,9 @@ function AppInner() {
       policyVersions &&
       (!privacyAccepted || !termsAccepted)
   );
+  const needsNamePrompt = Boolean(
+    me?.user && !needsPolicyAcceptance && !me.user.full_name?.trim()
+  );
 
   return (
     <BrowserRouter>
@@ -174,6 +178,10 @@ function AppInner() {
                 onAccepted={() =>
                   queryClient.invalidateQueries({ queryKey: ["me"] })
                 }
+              />
+              <NamePromptModal
+                isOpen={needsNamePrompt}
+                onSaved={() => queryClient.invalidateQueries({ queryKey: ["me"] })}
               />
               <AppShell me={me} />
             </>
