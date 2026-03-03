@@ -17,6 +17,7 @@ import {
   CheckSquare,
   Sparkles,
   MapPin,
+  MessageSquare,
 } from "lucide-react";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export default function AppShell({ me }) {
     { label: "TeamBuilder", to: "/teambuilder", icon: Users },
     { label: "FeedBack", to: "/feedback", icon: ClipboardList },
     { label: "InvestorTrack", to: "/investors", icon: LineChart },
+    { label: "Chat", to: "/chat", icon: MessageSquare },
     { label: "Passport", to: "/passports", icon: MapPin },
     ...(isAdmin
       ? [{ label: "WheelSpin", to: "/wheelspin", icon: Sparkles }]

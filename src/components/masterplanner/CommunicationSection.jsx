@@ -1,12 +1,15 @@
 import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2, Upload, X, FileText, CheckCircle, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { uploadPublicFile } from "@/lib/uploads";
+import { apiFetch } from "@/api";
 
 const MATERIAL_TYPES = [
   "Facebook Post",
@@ -35,6 +38,15 @@ export default function CommunicationSection({ data, onChange, readOnly }) {
   const contentDescription = data.marketing_content_description || "";
   const additionalInfo = data.marketing_additional_info || "";
   const uploadedFiles = data.marketing_files || [];
+  const chatCreateChannel = data.chat_create_channel || false;
+  const chatChannelName = data.chat_channel_name || "";
+  const chatChannelUserIds = data.chat_channel_user_ids || [];
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiFetch("/users"),
+    enabled: !readOnly
+  });
 
   const handleChange = (field, value) => {
     onChange({ [field]: value });
@@ -251,6 +263,83 @@ export default function CommunicationSection({ data, onChange, readOnly }) {
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Chat */}
+      <div className="space-y-3">
+        <Label className="text-lg font-semibold text-[#2d4650]">
+          Message channel
+        </Label>
+        <div className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+          <div>
+            <div className="font-medium">Create a message channel for this event</div>
+            <div className="text-xs text-slate-500">
+              Channel will be created when the plan is approved.
+            </div>
+          </div>
+          <Switch
+            checked={chatCreateChannel}
+            onCheckedChange={(checked) =>
+              !readOnly && handleChange("chat_create_channel", checked)
+            }
+            disabled={readOnly}
+          />
+        </div>
+        {chatCreateChannel && (
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="space-y-2">
+              <Label>Channel name</Label>
+              <Input
+                value={chatChannelName}
+                onChange={(e) => handleChange("chat_channel_name", e.target.value)}
+                placeholder="Event Planning Channel"
+                disabled={readOnly}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Add members</Label>
+              <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
+                {users.length === 0 && (
+                  <div className="text-xs text-slate-500">
+                    No users available.
+                  </div>
+                )}
+                {users.map((user) => {
+                  const checked = chatChannelUserIds.includes(user.id);
+                  return (
+                    <label
+                      key={user.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={readOnly}
+                        onChange={(event) => {
+                          if (readOnly) return;
+                          if (event.target.checked) {
+                            handleChange("chat_channel_user_ids", [
+                              ...chatChannelUserIds,
+                              user.id
+                            ]);
+                          } else {
+                            handleChange(
+                              "chat_channel_user_ids",
+                              chatChannelUserIds.filter((id) => id !== user.id)
+                            );
+                          }
+                        }}
+                      />
+                      <span>
+                        {user.full_name || user.email}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>

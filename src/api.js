@@ -116,6 +116,59 @@ export function markAllNotificationsRead() {
 }
 
 // ----------------------
+// Chat
+// ----------------------
+export function getChatChannels() {
+  return apiFetch("/chat/channels");
+}
+
+export function createChatChannel(data) {
+  return apiFetch("/chat/channels", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function getChatChannelMembers(channelId) {
+  return apiFetch(`/chat/channels/${channelId}/members`);
+}
+
+export function addChatChannelMembers(channelId, memberIds) {
+  return apiFetch(`/chat/channels/${channelId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ member_ids: memberIds })
+  });
+}
+
+export function removeChatChannelMember(channelId, userId) {
+  return apiFetch(`/chat/channels/${channelId}/members/${userId}`, {
+    method: "DELETE"
+  });
+}
+
+export function getChatMessages(channelId, params = {}) {
+  const qs = new URLSearchParams();
+  if (params.before) qs.set("before", params.before);
+  if (params.limit) qs.set("limit", params.limit);
+  const suffix = qs.toString();
+  return apiFetch(`/chat/channels/${channelId}/messages${suffix ? `?${suffix}` : ""}`);
+}
+
+export function createChatMessage(channelId, data) {
+  return apiFetch(`/chat/channels/${channelId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function toggleChatReaction(messageId, emoji) {
+  return apiFetch(`/chat/messages/${messageId}/reactions`, {
+    method: "POST",
+    body: JSON.stringify({ emoji })
+  });
+}
+
+// ----------------------
 // Passport (admin)
 // ----------------------
 

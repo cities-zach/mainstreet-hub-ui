@@ -42,6 +42,7 @@ import WheelSpin from "@/pages/WheelSpin";
 import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
 import PassportAdmin from "@/pages/PassportAdmin";
 import PassportPublic from "@/pages/PassportPublic";
+import Chat from "@/pages/Chat";
 
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
@@ -212,6 +213,9 @@ function AppInner() {
 
           {/* ---------- TASKS ---------- */}
           <Route path="/taskmaster" element={<TaskMaster />} />
+
+          {/* ---------- CHAT ---------- */}
+          <Route path="/chat" element={<Chat />} />
 
           {/* ---------- INVESTORS ---------- */}
           <Route path="/investors" element={<InvestorTrack />} />
