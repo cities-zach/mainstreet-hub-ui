@@ -126,6 +126,10 @@ export function getChatChannels() {
   return apiFetch("/chat/channels");
 }
 
+export function markChatChannelRead(channelId) {
+  return apiFetch(`/chat/channels/${channelId}/read`, { method: "POST" });
+}
+
 export function createChatChannel(data) {
   return apiFetch("/chat/channels", {
     method: "POST",

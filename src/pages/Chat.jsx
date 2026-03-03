@@ -7,6 +7,7 @@ import {
   getChatChannels,
   getChatMessages,
   getUserRoster,
+  markChatChannelRead,
   toggleChatReaction,
   API_BASE
 } from "@/api";
@@ -46,7 +47,7 @@ export default function Chat() {
     enabled: !!selectedChannelId
   });
 
-  const { data: channelMembers = [] } = useQuery({
+  const { data: channelMemberList = [] } = useQuery({
     queryKey: ["chat-members", selectedChannelId],
     queryFn: () => getChatChannelMembers(selectedChannelId),
     enabled: !!selectedChannelId
@@ -62,6 +63,8 @@ export default function Chat() {
     return map;
   }, [messagesPayload?.attachments]);
 
+  const orderedMessages = useMemo(() => messages.slice().reverse(), [messages]);
+
   const reactionMap = useMemo(() => {
     const map = new Map();
     for (const reaction of messagesPayload?.reactions || []) {
@@ -76,6 +79,24 @@ export default function Chat() {
       setSelectedChannelId(channels[0].id);
     }
   }, [channels, selectedChannelId]);
+
+  useEffect(() => {
+    if (!selectedChannelId) return;
+    markChatChannelRead(selectedChannelId)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+      })
+      .catch(() => null);
+  }, [selectedChannelId, queryClient]);
+
+  useEffect(() => {
+    if (!selectedChannelId || !messagesPayload) return;
+    markChatChannelRead(selectedChannelId)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+      })
+      .catch(() => null);
+  }, [messagesPayload, selectedChannelId, queryClient]);
 
   useEffect(() => {
     if (!selectedChannelId) return;
@@ -183,10 +204,54 @@ export default function Chat() {
 
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId);
   const channelTitle = selectedChannel?.display_name || selectedChannel?.name || "Conversation";
-  const memberList = channelMembers
+  const memberList = channelMemberList
     .map((member) => member.full_name || member.email)
     .filter(Boolean)
     .join(", ");
+  const lastReadAt = selectedChannel?.last_read_at
+    ? new Date(selectedChannel.last_read_at)
+    : null;
+
+  const firstUnreadId = useMemo(() => {
+    if (!lastReadAt) return null;
+    const next = orderedMessages.find((msg) => {
+      if (!msg.created_at) return false;
+      return new Date(msg.created_at) > lastReadAt;
+    });
+    return next?.id || null;
+  }, [lastReadAt, orderedMessages]);
+
+  const groupedMessages = useMemo(() => {
+    const groups = [];
+    let current = null;
+    for (const msg of orderedMessages) {
+      const createdAt = msg.created_at ? new Date(msg.created_at) : null;
+      const authorKey = `${msg.author_type}-${msg.user_id || msg.email || "unknown"}`;
+      const shouldStartNew =
+        !current ||
+        current.authorKey !== authorKey ||
+        (createdAt &&
+          current.lastAt &&
+          Math.abs(createdAt.getTime() - current.lastAt.getTime()) > 5 * 60 * 1000);
+      if (shouldStartNew) {
+        current = {
+          authorKey,
+          authorType: msg.author_type,
+          authorName:
+            msg.author_type === "fred" ? "FRED" : msg.full_name || msg.email || "User",
+          messages: [],
+          firstAt: createdAt,
+          lastAt: createdAt,
+        };
+        groups.push(current);
+      }
+      current.messages.push(msg);
+      if (createdAt) current.lastAt = createdAt;
+    }
+    return groups;
+  }, [orderedMessages]);
+
+  const isMine = (msg) => msg.user_id && msg.user_id === me?.user?.id;
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100">
@@ -263,8 +328,17 @@ export default function Chat() {
                 }`}
                 onClick={() => setSelectedChannelId(channel.id)}
               >
-                <div className="font-medium">
-                  {channel.name || (channel.channel_type === "dm" ? "Direct message" : "Channel")}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-medium">
+                    {channel.display_name ||
+                      channel.name ||
+                      (channel.channel_type === "dm" ? "Direct message" : "Channel")}
+                  </div>
+                  {Number(channel.unread_count) > 0 && (
+                    <span className="rounded-full bg-[#835879] px-2 py-0.5 text-[10px] text-white">
+                      {channel.unread_count}
+                    </span>
+                  )}
                 </div>
                 {channel.last_message && (
                   <div className="text-xs text-slate-500 line-clamp-1">
@@ -290,59 +364,93 @@ export default function Chat() {
               {messages.length === 0 && (
                 <div className="text-sm text-slate-500">No messages yet.</div>
               )}
-              {messages
-                .slice()
-                .reverse()
-                .map((msg) => {
-                  const files = attachmentMap.get(msg.id) || [];
-                  const reactions = reactionMap.get(msg.id) || [];
-                  return (
-                    <div key={msg.id} className="rounded-lg border px-3 py-2">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>
-                          {msg.author_type === "fred"
-                            ? "FRED"
-                            : msg.full_name || msg.email || "User"}
-                        </span>
-                        <span>
-                          {msg.created_at
-                            ? new Date(msg.created_at).toLocaleString()
-                            : ""}
-                        </span>
+              {groupedMessages.map((group, groupIndex) => {
+                const dateLabel = group.firstAt
+                  ? group.firstAt.toLocaleDateString()
+                  : null;
+                const prevGroup = groupedMessages[groupIndex - 1];
+                const prevDateLabel =
+                  prevGroup?.firstAt?.toLocaleDateString?.() || null;
+                const showDate = dateLabel && dateLabel !== prevDateLabel;
+                return (
+                  <div key={`${group.authorKey}-${groupIndex}`} className="space-y-2">
+                    {showDate && (
+                      <div className="text-center text-xs text-slate-400">
+                        {dateLabel}
                       </div>
-                      {msg.body && <div className="text-sm">{msg.body}</div>}
-                      {files.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {files.map((file) => (
-                            <a
-                              key={file.id}
-                              href={file.file_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-[#835879] underline"
-                            >
-                              {file.file_name || "Attachment"}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        {REACTION_OPTIONS.map((emoji) => {
-                          const count = reactions.filter((r) => r.emoji === emoji).length;
-                          return (
-                            <button
-                              key={`${msg.id}-${emoji}`}
-                              className="rounded-full border px-2 py-0.5"
-                              onClick={() => handleReaction(msg.id, emoji)}
-                            >
-                              {emoji} {count > 0 ? count : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    )}
+                    <div className="text-xs text-slate-500">
+                      {group.authorName}
+                      {group.firstAt ? ` • ${group.firstAt.toLocaleTimeString()}` : ""}
                     </div>
-                  );
-                })}
+                    <div className="space-y-2">
+                      {group.messages.map((msg) => {
+                        const files = attachmentMap.get(msg.id) || [];
+                        const reactions = reactionMap.get(msg.id) || [];
+                        const mine = isMine(msg);
+                        const createdAt = msg.created_at ? new Date(msg.created_at) : null;
+                        const showUnreadDivider = firstUnreadId === msg.id;
+                        return (
+                          <div key={msg.id} className="space-y-2">
+                            {showUnreadDivider && (
+                              <div className="text-center text-[11px] text-[#835879]">
+                                New
+                              </div>
+                            )}
+                            <div
+                              className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                                mine
+                                  ? "bg-[#835879] text-white ml-auto"
+                                  : "bg-white border"
+                              }`}
+                            >
+                              {msg.body && <div className="whitespace-pre-wrap">{msg.body}</div>}
+                              {files.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {files.map((file) => (
+                                    <a
+                                      key={file.id}
+                                      href={file.file_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`block text-xs underline ${
+                                        mine ? "text-white" : "text-[#835879]"
+                                      }`}
+                                    >
+                                      {file.file_name || "Attachment"}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div
+                              className={`text-[10px] text-slate-400 ${
+                                mine ? "text-right" : ""
+                              }`}
+                            >
+                              {createdAt ? createdAt.toLocaleString() : ""}
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              {REACTION_OPTIONS.map((emoji) => {
+                                const count = reactions.filter((r) => r.emoji === emoji).length;
+                                return (
+                                  <button
+                                    key={`${msg.id}-${emoji}`}
+                                    className="rounded-full border px-2 py-0.5"
+                                    onClick={() => handleReaction(msg.id, emoji)}
+                                  >
+                                    {emoji} {count > 0 ? count : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="space-y-2">
