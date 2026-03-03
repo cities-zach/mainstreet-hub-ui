@@ -5,7 +5,10 @@ import {
   getPassportInstance,
   getPublicPassport,
   getPublicSystemSettings,
+  getPassportLeaderboard,
+  savePassportTeam,
   stampPassportInstance,
+  submitPassportScores,
   updatePassportInstance
 } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -41,6 +44,13 @@ export default function PassportPublic() {
     contact_phone: ""
   });
   const [contactSaved, setContactSaved] = useState(false);
+  const [team, setTeam] = useState(null);
+  const [players, setPlayers] = useState([]);
+  const [scores, setScores] = useState([]);
+  const [leaderboard, setLeaderboard] = useState(null);
+  const [teamForm, setTeamForm] = useState({ team_name: "", players: [] });
+  const [teamSaving, setTeamSaving] = useState(false);
+  const [scoreInputs, setScoreInputs] = useState({});
   const [soundSettings, setSoundSettings] = useState({
     task_completion_sound_url: "",
     level_up_sound_url: ""
@@ -51,6 +61,17 @@ export default function PassportPublic() {
     () => new Set(stamps.map((stamp) => stamp.stop_id)),
     [stamps]
   );
+  const scoringEnabled = Boolean(passport?.allow_scores);
+  const maxPlayers = Number(passport?.scoring_max_players) || 1;
+  const needsTeamSetup = scoringEnabled && (!team || players.length === 0);
+
+  const scoreMap = useMemo(() => {
+    const map = new Map();
+    for (const score of scores) {
+      map.set(`${score.stop_id}:${score.player_id}`, score.score_value);
+    }
+    return map;
+  }, [scores]);
 
   useEffect(() => {
     let isMounted = true;
@@ -91,6 +112,9 @@ export default function PassportPublic() {
         setStops(detail.stops || passportData.stops || []);
         setStamps(detail.stamps || []);
         setEntryCount(detail.entry_count || 0);
+        setTeam(detail.team || null);
+        setPlayers(detail.players || []);
+        setScores(detail.scores || []);
         if (detail.instance) {
           setContactForm({
             contact_name: detail.instance.contact_name || "",
@@ -102,6 +126,12 @@ export default function PassportPublic() {
             detail.instance.contact_email ||
             detail.instance.contact_phone;
           setContactSaved(Boolean(hasContact));
+        }
+        if (detail.team) {
+          setTeamForm({
+            team_name: detail.team.team_name || "",
+            players: (detail.players || []).map((player) => player.player_name || "")
+          });
         }
         if (!selectedStop && (detail.stops || []).length > 0) {
           setSelectedStop(detail.stops[0]);
@@ -156,6 +186,15 @@ export default function PassportPublic() {
     };
     stampIfNeeded();
   }, [qrToken, bonusToken, instance?.token]);
+
+  useEffect(() => {
+    if (!scoringEnabled) return;
+    setTeamForm((prev) => {
+      const existing = Array.isArray(prev.players) ? prev.players : [];
+      const padded = Array.from({ length: maxPlayers }, (_, idx) => existing[idx] || "");
+      return { ...prev, players: padded };
+    });
+  }, [scoringEnabled, maxPlayers]);
 
   const parseScanToken = (decodedText) => {
     if (!decodedText) return { token: "", isBonus: false };
@@ -241,6 +280,78 @@ export default function PassportPublic() {
       toast.error(err.message || "Unable to save contact info.");
     }
   };
+
+  const canSetupTeam =
+    scoringEnabled && (!passport?.require_contact || contactSaved);
+
+  const handleTeamSave = async () => {
+    if (!instance?.token || !canSetupTeam) return;
+    const teamName = (teamForm.team_name || "").trim();
+    const playerNames = (teamForm.players || []).map((name) => name.trim()).filter(Boolean);
+    if (!teamName) {
+      toast.error("Team name is required.");
+      return;
+    }
+    if (playerNames.length === 0) {
+      toast.error("Please add at least one player.");
+      return;
+    }
+    try {
+      setTeamSaving(true);
+      const res = await savePassportTeam(instance.token, {
+        team_name: teamName,
+        players: playerNames
+      });
+      setTeam(res.team || null);
+      setPlayers(res.players || []);
+      setTeamForm({
+        team_name: res.team?.team_name || teamName,
+        players: (res.players || []).map((player) => player.player_name || "")
+      });
+      toast.success("Team saved.");
+      setActiveTab("stops");
+    } catch (err) {
+      toast.error(err.message || "Unable to save team.");
+    } finally {
+      setTeamSaving(false);
+    }
+  };
+
+  const handleScoreSave = async (stopId) => {
+    if (!instance?.token) return;
+    try {
+      const scoresPayload = (players || [])
+        .map((player) => {
+          const value =
+            scoreInputs?.[stopId]?.[player.id] ?? scoreMap.get(`${stopId}:${player.id}`);
+          if (value === "" || value === null || value === undefined) return null;
+          const numberValue = Number(value);
+          if (!Number.isFinite(numberValue)) return null;
+          return { player_id: player.id, score_value: numberValue };
+        })
+        .filter(Boolean);
+      if (scoresPayload.length === 0) {
+        toast.error("Enter at least one score.");
+        return;
+      }
+      await submitPassportScores(instance.token, {
+        stop_id: stopId,
+        scores: scoresPayload
+      });
+      const detail = await getPassportInstance(instance.token);
+      setScores(detail.scores || []);
+      toast.success("Scores saved.");
+    } catch (err) {
+      toast.error(err.message || "Unable to save scores.");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "leaderboard" || !instance?.token || !scoringEnabled) return;
+    getPassportLeaderboard(instance.token)
+      .then((data) => setLeaderboard(data))
+      .catch(() => setLeaderboard(null));
+  }, [activeTab, instance?.token, scoringEnabled]);
 
   const completedCount = visitedStopIds.size;
   const totalStops = stops.length;
@@ -328,7 +439,44 @@ export default function PassportPublic() {
           </Card>
         )}
 
-        {(!requireContact || contactSaved) && (
+        {scoringEnabled && (!requireContact || contactSaved) && needsTeamSetup && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Team setup</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                placeholder="Team name"
+                value={teamForm.team_name}
+                onChange={(event) =>
+                  setTeamForm({ ...teamForm, team_name: event.target.value })
+                }
+              />
+              <div className="space-y-2">
+                {Array.from({ length: maxPlayers }).map((_, idx) => (
+                  <Input
+                    key={`player-${idx}`}
+                    placeholder={`Player ${idx + 1} name`}
+                    value={teamForm.players?.[idx] || ""}
+                    onChange={(event) => {
+                      const nextPlayers = [...(teamForm.players || [])];
+                      nextPlayers[idx] = event.target.value;
+                      setTeamForm({ ...teamForm, players: nextPlayers });
+                    }}
+                  />
+                ))}
+                <div className="text-xs text-slate-500">
+                  You can leave extra player slots blank.
+                </div>
+              </div>
+              <Button onClick={handleTeamSave} disabled={teamSaving}>
+                {teamSaving ? "Saving..." : "Save team"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {(!requireContact || contactSaved) && !needsTeamSetup && (
           <div className="flex flex-wrap gap-2">
             <Button
               variant={activeTab === "stops" ? "default" : "outline"}
@@ -348,10 +496,18 @@ export default function PassportPublic() {
             >
               Scanner
             </Button>
+            {scoringEnabled && (
+              <Button
+                variant={activeTab === "leaderboard" ? "default" : "outline"}
+                onClick={() => setActiveTab("leaderboard")}
+              >
+                Leaderboard
+              </Button>
+            )}
           </div>
         )}
 
-        {(!requireContact || contactSaved) && activeTab === "stops" && (
+        {(!requireContact || contactSaved) && !needsTeamSetup && activeTab === "stops" && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Stops</CardTitle>
@@ -411,6 +567,39 @@ export default function PassportPublic() {
                             {stop.special_text}
                           </div>
                         )}
+                        {scoringEnabled && team && (
+                          <div className="space-y-2 pt-2">
+                            <div className="text-sm font-semibold">Scores</div>
+                            {(players || []).map((player) => {
+                              const currentValue =
+                                scoreInputs?.[stop.id]?.[player.id] ??
+                                scoreMap.get(`${stop.id}:${player.id}`) ??
+                                "";
+                              return (
+                                <Input
+                                  key={player.id}
+                                  type="number"
+                                  step="1"
+                                  placeholder={`${player.player_name} score`}
+                                  value={currentValue}
+                                  onChange={(event) => {
+                                    const nextValue = event.target.value;
+                                    setScoreInputs((prev) => ({
+                                      ...prev,
+                                      [stop.id]: {
+                                        ...(prev[stop.id] || {}),
+                                        [player.id]: nextValue
+                                      }
+                                    }));
+                                  }}
+                                />
+                              );
+                            })}
+                            <Button onClick={() => handleScoreSave(stop.id)}>
+                              Save scores
+                            </Button>
+                          </div>
+                        )}
                         <Button onClick={() => setActiveTab("scanner")}>
                           Go to scanner
                         </Button>
@@ -426,7 +615,7 @@ export default function PassportPublic() {
           </Card>
         )}
 
-        {(!requireContact || contactSaved) && activeTab === "map" && (
+        {(!requireContact || contactSaved) && !needsTeamSetup && activeTab === "map" && (
           <div className="space-y-3">
             <PassportMap
               stops={stops}
@@ -451,6 +640,39 @@ export default function PassportPublic() {
                       {selectedStop.special_text}
                     </div>
                   )}
+                  {scoringEnabled && team && (
+                    <div className="space-y-2 pt-2">
+                      <div className="text-sm font-semibold">Scores</div>
+                      {(players || []).map((player) => {
+                        const currentValue =
+                          scoreInputs?.[selectedStop.id]?.[player.id] ??
+                          scoreMap.get(`${selectedStop.id}:${player.id}`) ??
+                          "";
+                        return (
+                          <Input
+                            key={player.id}
+                            type="number"
+                            step="1"
+                            placeholder={`${player.player_name} score`}
+                            value={currentValue}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setScoreInputs((prev) => ({
+                                ...prev,
+                                [selectedStop.id]: {
+                                  ...(prev[selectedStop.id] || {}),
+                                  [player.id]: nextValue
+                                }
+                              }));
+                            }}
+                          />
+                        );
+                      })}
+                      <Button onClick={() => handleScoreSave(selectedStop.id)}>
+                        Save scores
+                      </Button>
+                    </div>
+                  )}
                   <Button onClick={() => setActiveTab("scanner")}>Open scanner</Button>
                 </CardContent>
               </Card>
@@ -458,7 +680,7 @@ export default function PassportPublic() {
           </div>
         )}
 
-        {(!requireContact || contactSaved) && activeTab === "scanner" && (
+        {(!requireContact || contactSaved) && !needsTeamSetup && activeTab === "scanner" && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Scanner</CardTitle>
@@ -486,6 +708,75 @@ export default function PassportPublic() {
                 }}
                 onScan={handleScanResult}
               />
+            </CardContent>
+          </Card>
+        )}
+
+        {(!requireContact || contactSaved) && !needsTeamSetup && activeTab === "leaderboard" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Leaderboard</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!leaderboard && (
+                <div className="text-sm text-slate-500">
+                  Loading leaderboard…
+                </div>
+              )}
+              {leaderboard && (
+                <>
+                  <div className="text-xs text-slate-500">
+                    {leaderboard.scoring_high_wins ? "High score wins" : "Low score wins"}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-semibold">Teams</div>
+                    {leaderboard.teams?.length ? (
+                      <div className="space-y-2">
+                        {leaderboard.teams.map((teamRow, index) => (
+                          <div
+                            key={teamRow.team_id}
+                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                          >
+                            <div className="font-medium">
+                              #{index + 1} {teamRow.team_name}
+                            </div>
+                            <div className="text-slate-600">
+                              {Number(teamRow.total_score || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">No team scores yet.</div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-semibold">Individuals</div>
+                    {leaderboard.individuals?.length ? (
+                      <div className="space-y-2">
+                        {leaderboard.individuals.map((row, index) => (
+                          <div
+                            key={row.player_id}
+                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                          >
+                            <div className="font-medium">
+                              #{index + 1} {row.player_name}{" "}
+                              <span className="text-xs text-slate-500">
+                                ({row.team_name})
+                              </span>
+                            </div>
+                            <div className="text-slate-600">
+                              {Number(row.total_score || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">No individual scores yet.</div>
+                    )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}

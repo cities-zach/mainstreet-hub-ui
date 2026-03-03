@@ -209,6 +209,8 @@ export default function PassportAdmin() {
     required_stops_count: "",
     allow_extra_entries: false,
     allow_scores: false,
+    scoring_high_wins: false,
+    scoring_max_players: 1,
     require_contact: false,
     require_staff_confirmation: false
   });
@@ -279,6 +281,8 @@ export default function PassportAdmin() {
         required_stops_count: "",
         allow_extra_entries: false,
         allow_scores: false,
+        scoring_high_wins: false,
+        scoring_max_players: 1,
         require_contact: false,
         require_staff_confirmation: false
       });
@@ -650,6 +654,38 @@ export default function PassportAdmin() {
                   </label>
                 ))}
               </div>
+              {form.allow_scores && (
+                <div className="space-y-3 rounded-lg border p-3 text-sm">
+                  <div className="space-y-2">
+                    <Label>Score rule</Label>
+                    <select
+                      value={form.scoring_high_wins ? "high" : "low"}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          scoring_high_wins: event.target.value === "high"
+                        })
+                      }
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="low">Low score wins</option>
+                      <option value="high">High score wins</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max players per team</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="8"
+                      value={form.scoring_max_players}
+                      onChange={(event) =>
+                        setForm({ ...form, scoring_max_players: event.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
               <Button className="w-full" onClick={handleCreate} disabled={!form.title}>
                 Create passport
               </Button>
@@ -1006,6 +1042,59 @@ export default function PassportAdmin() {
                         })
                       }
                     />
+                  </div>
+                  <div className="space-y-2 rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-medium">Allow scoring</div>
+                        <div className="text-xs text-slate-500">
+                          Locked after publish.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={selectedPassport.allow_scores}
+                        disabled={selectedPassport.status !== "draft"}
+                        onCheckedChange={(checked) =>
+                          updateMutation.mutate({
+                            id: selectedPassport.id,
+                            data: { allow_scores: checked }
+                          })
+                        }
+                      />
+                    </div>
+                    {selectedPassport.allow_scores && (
+                      <div className="grid md:grid-cols-2 gap-3 pt-2">
+                        <select
+                          value={selectedPassport.scoring_high_wins ? "high" : "low"}
+                          disabled={selectedPassport.status !== "draft"}
+                          onChange={(event) =>
+                            updateMutation.mutate({
+                              id: selectedPassport.id,
+                              data: {
+                                scoring_high_wins: event.target.value === "high"
+                              }
+                            })
+                          }
+                          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                        >
+                          <option value="low">Low score wins</option>
+                          <option value="high">High score wins</option>
+                        </select>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="8"
+                          value={selectedPassport.scoring_max_players || 1}
+                          disabled={selectedPassport.status !== "draft"}
+                          onChange={(event) =>
+                            updateMutation.mutate({
+                              id: selectedPassport.id,
+                              data: { scoring_max_players: event.target.value }
+                            })
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

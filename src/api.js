@@ -228,6 +228,24 @@ export function stampPassportInstance(token, data) {
   });
 }
 
+export function savePassportTeam(token, data) {
+  return apiFetch(`/p/instance/${token}/team`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function submitPassportScores(token, data) {
+  return apiFetch(`/p/instance/${token}/scores`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function getPassportLeaderboard(token) {
+  return apiFetch(`/p/instance/${token}/leaderboard`);
+}
+
 export function updatePassportInstance(token, data) {
   return apiFetch(`/p/instance/${token}`, {
     method: "PATCH",
