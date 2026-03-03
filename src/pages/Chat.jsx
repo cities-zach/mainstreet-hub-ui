@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   createChatChannel,
   createChatMessage,
+  deleteChatChannel,
   getChatChannelMembers,
   getChatChannels,
   getChatMessages,
@@ -21,6 +23,7 @@ const REACTION_OPTIONS = ["👍", "🎉", "❤️", "😂"];
 
 export default function Chat() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const me = queryClient.getQueryData(["me"]);
   const [selectedChannelId, setSelectedChannelId] = useState(null);
   const [messageText, setMessageText] = useState("");
@@ -79,6 +82,13 @@ export default function Chat() {
       setSelectedChannelId(channels[0].id);
     }
   }, [channels, selectedChannelId]);
+
+  useEffect(() => {
+    const requested = searchParams.get("channel_id");
+    if (requested && requested !== selectedChannelId) {
+      setSelectedChannelId(requested);
+    }
+  }, [searchParams, selectedChannelId]);
 
   useEffect(() => {
     if (!selectedChannelId) return;
@@ -204,6 +214,11 @@ export default function Chat() {
 
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId);
   const channelTitle = selectedChannel?.display_name || selectedChannel?.name || "Conversation";
+  const canDeleteChannel =
+    !!selectedChannel &&
+    (selectedChannel.channel_type === "dm" ||
+      me?.user?.role === "admin" ||
+      me?.user?.role === "super_admin");
   const memberList = channelMemberList
     .map((member) => member.full_name || member.email)
     .filter(Boolean)
@@ -252,6 +267,26 @@ export default function Chat() {
   }, [orderedMessages]);
 
   const isMine = (msg) => msg.user_id && msg.user_id === me?.user?.id;
+
+  const handleDeleteChannel = async () => {
+    if (!selectedChannel) return;
+    const name = selectedChannel.display_name || selectedChannel.name || "this chat";
+    const confirmed = window.confirm(
+      selectedChannel.channel_type === "dm"
+        ? `Delete ${name}? This will remove the thread for everyone.`
+        : `Delete channel "${name}"? This will remove the channel for everyone.`
+    );
+    if (!confirmed) return;
+    try {
+      await deleteChatChannel(selectedChannel.id);
+      setSelectedChannelId(null);
+      queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+      queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+      toast.success("Chat deleted");
+    } catch (error) {
+      toast.error(error?.message || "Unable to delete chat.");
+    }
+  };
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100">
@@ -352,12 +387,26 @@ export default function Chat() {
 
         <Card className="bg-white/80">
           <CardHeader>
-            <CardTitle className="text-lg">{channelTitle}</CardTitle>
-            {memberList && (
-              <div className="text-xs text-slate-500">
-                Members: {memberList}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-lg">{channelTitle}</CardTitle>
+                {memberList && (
+                  <div className="text-xs text-slate-500">
+                    Members: {memberList}
+                  </div>
+                )}
               </div>
-            )}
+              {canDeleteChannel && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={handleDeleteChannel}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">

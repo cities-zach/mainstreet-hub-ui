@@ -82,6 +82,17 @@ export function getUserRoster() {
   return apiFetch("/users/roster");
 }
 
+export function deleteUser(userId) {
+  return apiFetch(`/users/${userId}`, { method: "DELETE" });
+}
+
+export function sendUserAnnouncement(payload) {
+  return apiFetch("/users/announce", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getEventBudget(eventId) {
   return apiFetch(`/events/${eventId}/budget`);
 }
@@ -128,6 +139,10 @@ export function getChatChannels() {
 
 export function markChatChannelRead(channelId) {
   return apiFetch(`/chat/channels/${channelId}/read`, { method: "POST" });
+}
+
+export function deleteChatChannel(channelId) {
+  return apiFetch(`/chat/channels/${channelId}`, { method: "DELETE" });
 }
 
 export function createChatChannel(data) {

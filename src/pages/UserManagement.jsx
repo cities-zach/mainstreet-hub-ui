@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/api";
+import { apiFetch, deleteUser, sendUserAnnouncement } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,6 +24,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 
 /* ---------------- API HELPERS ---------------- */
 
@@ -60,6 +62,9 @@ export default function UserManagement() {
   const [search, setSearch] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("volunteer");
+  const [announceSubject, setAnnounceSubject] = useState("");
+  const [announceMessage, setAnnounceMessage] = useState("");
+  const [respectPreferences, setRespectPreferences] = useState(true);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -97,6 +102,29 @@ export default function UserManagement() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: deleteUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("User removed");
+    },
+    onError: (error) => {
+      toast.error(error?.message || "Failed to delete user");
+    }
+  });
+
+  const announceMutation = useMutation({
+    mutationFn: sendUserAnnouncement,
+    onSuccess: (data) => {
+      toast.success(`Announcement sent to ${data?.sent ?? 0} users`);
+      setAnnounceSubject("");
+      setAnnounceMessage("");
+    },
+    onError: (error) => {
+      toast.error(error?.message || "Failed to send announcement");
+    }
+  });
+
   const handleRoleChange = (userId, newRole) => {
     updateUserMutation.mutate({
       id: userId,
@@ -115,6 +143,29 @@ export default function UserManagement() {
     event.preventDefault();
     if (!inviteEmail.trim()) return;
     inviteMutation.mutate({ email: inviteEmail.trim(), role: inviteRole });
+  };
+
+  const handleDeleteUser = (user) => {
+    if (!user?.id) return;
+    const name = user.full_name || user.email || "this user";
+    const confirmed = window.confirm(
+      `Remove ${name}? This will disable their account and revoke access.`
+    );
+    if (!confirmed) return;
+    deleteUserMutation.mutate(user.id);
+  };
+
+  const handleAnnounceSubmit = (event) => {
+    event.preventDefault();
+    if (!announceSubject.trim() || !announceMessage.trim()) {
+      toast.error("Subject and message are required");
+      return;
+    }
+    announceMutation.mutate({
+      subject: announceSubject.trim(),
+      message: announceMessage.trim(),
+      respect_preferences: respectPreferences
+    });
   };
 
   if (isLoading) return <div className="p-8">Loading users…</div>;
@@ -315,33 +366,98 @@ export default function UserManagement() {
                     </td>
 
                     <td className="p-4">
-                      {user.account_status !== "approved" ? (
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() =>
-                            handleStatusChange(user.id, "approved")
-                          }
-                        >
-                          Approve
-                        </Button>
-                      ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {user.account_status !== "approved" ? (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() =>
+                              handleStatusChange(user.id, "approved")
+                            }
+                          >
+                            Approve
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                            onClick={() =>
+                              handleStatusChange(user.id, "pending")
+                            }
+                          >
+                            Suspend
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-amber-600 border-amber-200 hover:bg-amber-50"
-                          onClick={() =>
-                            handleStatusChange(user.id, "pending")
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                          disabled={
+                            user.id === currentUser?.id ||
+                            (user.role === "super_admin" &&
+                              currentUser?.role !== "super_admin") ||
+                            deleteUserMutation.isPending
                           }
+                          onClick={() => handleDeleteUser(user)}
                         >
-                          Suspend
+                          Remove
                         </Button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </CardContent>
+        </Card>
+
+        {/* Announcements */}
+        <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+          <CardContent className="p-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">
+                Send announcement
+              </h2>
+              <p className="text-sm text-slate-500">
+                Email all active users to share updates and announcements.
+              </p>
+            </div>
+            <form className="space-y-3" onSubmit={handleAnnounceSubmit}>
+              <div className="space-y-2">
+                <Label>Subject</Label>
+                <Input
+                  value={announceSubject}
+                  onChange={(e) => setAnnounceSubject(e.target.value)}
+                  placeholder="Update from MainSuite"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Message</Label>
+                <Textarea
+                  value={announceMessage}
+                  onChange={(e) => setAnnounceMessage(e.target.value)}
+                  placeholder="Share what's new..."
+                  rows={4}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>Respect notification email preferences</Label>
+                <Switch
+                  checked={respectPreferences}
+                  onCheckedChange={setRespectPreferences}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  className="bg-[#835879] text-white"
+                  disabled={announceMutation.isPending}
+                >
+                  {announceMutation.isPending ? "Sending..." : "Send Email"}
+                </Button>
+              </div>
+            </form>
           </CardContent>
         </Card>
       </div>
