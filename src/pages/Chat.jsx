@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createChatChannel,
   createChatMessage,
   getChatChannels,
   getChatMessages,
+  getUserRoster,
   toggleChatReaction,
   API_BASE
 } from "@/api";
@@ -22,10 +24,19 @@ export default function Chat() {
   const [messageText, setMessageText] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [channelType, setChannelType] = useState("channel");
+  const [channelName, setChannelName] = useState("");
+  const [channelMembers, setChannelMembers] = useState([]);
 
   const { data: channels = [] } = useQuery({
     queryKey: ["chat-channels"],
     queryFn: getChatChannels
+  });
+
+  const { data: roster = [] } = useQuery({
+    queryKey: ["user-roster"],
+    queryFn: getUserRoster
   });
 
   const { data: messagesPayload } = useQuery({
@@ -129,6 +140,31 @@ export default function Chat() {
     }
   };
 
+  const handleCreateChannel = async () => {
+    if (channelType === "channel" && !channelName.trim()) {
+      toast.error("Channel name is required.");
+      return;
+    }
+    if (channelMembers.length === 0) {
+      toast.error("Select at least one member.");
+      return;
+    }
+    try {
+      const channel = await createChatChannel({
+        channel_type: channelType,
+        name: channelType === "channel" ? channelName.trim() : null,
+        member_ids: channelMembers
+      });
+      setSelectedChannelId(channel.id);
+      setChannelName("");
+      setChannelMembers([]);
+      setShowCreate(false);
+      queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+    } catch (error) {
+      toast.error(error?.message || "Unable to create channel.");
+    }
+  };
+
   const handleReaction = async (messageId, emoji) => {
     try {
       await toggleChatReaction(messageId, emoji);
@@ -148,6 +184,60 @@ export default function Chat() {
             <CardTitle className="text-lg">Channels</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreate((prev) => !prev)}
+              >
+                {showCreate ? "Cancel" : "New channel"}
+              </Button>
+            </div>
+            {showCreate && (
+              <div className="space-y-2 rounded-lg border p-2 text-sm">
+                <select
+                  value={channelType}
+                  onChange={(event) => setChannelType(event.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-2 py-1"
+                >
+                  <option value="channel">Channel</option>
+                  <option value="dm">Direct message</option>
+                </select>
+                {channelType === "channel" && (
+                  <Input
+                    value={channelName}
+                    onChange={(event) => setChannelName(event.target.value)}
+                    placeholder="Channel name"
+                  />
+                )}
+                <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {roster.map((user) => {
+                    const checked = channelMembers.includes(user.id);
+                    return (
+                      <label key={user.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            if (event.target.checked) {
+                              setChannelMembers((prev) => [...prev, user.id]);
+                            } else {
+                              setChannelMembers((prev) =>
+                                prev.filter((id) => id !== user.id)
+                              );
+                            }
+                          }}
+                        />
+                        <span>{user.full_name || user.email}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <Button size="sm" onClick={handleCreateChannel}>
+                  Create
+                </Button>
+              </div>
+            )}
             {channels.length === 0 && (
               <div className="text-sm text-slate-500">No channels yet.</div>
             )}

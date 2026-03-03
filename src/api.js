@@ -78,6 +78,10 @@ export function getUsers() {
   return apiFetch("/users");
 }
 
+export function getUserRoster() {
+  return apiFetch("/users/roster");
+}
+
 export function getEventBudget(eventId) {
   return apiFetch(`/events/${eventId}/budget`);
 }
