@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createChatChannel,
   createChatMessage,
+  getChatChannelMembers,
   getChatChannels,
   getChatMessages,
   getUserRoster,
@@ -42,6 +43,12 @@ export default function Chat() {
   const { data: messagesPayload } = useQuery({
     queryKey: ["chat-messages", selectedChannelId],
     queryFn: () => getChatMessages(selectedChannelId),
+    enabled: !!selectedChannelId
+  });
+
+  const { data: channelMembers = [] } = useQuery({
+    queryKey: ["chat-members", selectedChannelId],
+    queryFn: () => getChatChannelMembers(selectedChannelId),
     enabled: !!selectedChannelId
   });
 
@@ -175,6 +182,11 @@ export default function Chat() {
   };
 
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId);
+  const channelTitle = selectedChannel?.display_name || selectedChannel?.name || "Conversation";
+  const memberList = channelMembers
+    .map((member) => member.full_name || member.email)
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100">
@@ -266,9 +278,12 @@ export default function Chat() {
 
         <Card className="bg-white/80">
           <CardHeader>
-            <CardTitle className="text-lg">
-              {selectedChannel?.name || "Conversation"}
-            </CardTitle>
+            <CardTitle className="text-lg">{channelTitle}</CardTitle>
+            {memberList && (
+              <div className="text-xs text-slate-500">
+                Members: {memberList}
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
@@ -283,10 +298,17 @@ export default function Chat() {
                   const reactions = reactionMap.get(msg.id) || [];
                   return (
                     <div key={msg.id} className="rounded-lg border px-3 py-2">
-                      <div className="text-xs text-slate-500">
-                        {msg.author_type === "fred"
-                          ? "FRED"
-                          : msg.full_name || msg.email || "User"}
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>
+                          {msg.author_type === "fred"
+                            ? "FRED"
+                            : msg.full_name || msg.email || "User"}
+                        </span>
+                        <span>
+                          {msg.created_at
+                            ? new Date(msg.created_at).toLocaleString()
+                            : ""}
+                        </span>
                       </div>
                       {msg.body && <div className="text-sm">{msg.body}</div>}
                       {files.length > 0 && (
