@@ -164,6 +164,7 @@ export default function Chat() {
       toast.error("Write a message or attach a file.");
       return;
     }
+    const wantsFred = /@fred\b/i.test(messageText);
     try {
       await createChatMessage(selectedChannelId, {
         body: messageText,
@@ -173,6 +174,18 @@ export default function Chat() {
       setAttachments([]);
       queryClient.invalidateQueries({ queryKey: ["chat-messages", selectedChannelId] });
       queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+      if (wantsFred) {
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: ["chat-messages", selectedChannelId]
+          });
+        }, 2500);
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: ["chat-messages", selectedChannelId]
+          });
+        }, 8000);
+      }
     } catch (error) {
       toast.error(error?.message || "Unable to send message.");
     }
