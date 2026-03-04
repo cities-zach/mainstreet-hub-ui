@@ -168,7 +168,8 @@ export default function Chat() {
     try {
       await createChatMessage(selectedChannelId, {
         body: messageText,
-        attachments
+        attachments,
+        mentions_fred: wantsFred
       });
       setMessageText("");
       setAttachments([]);
