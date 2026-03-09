@@ -212,6 +212,7 @@ export default function PassportAdmin() {
     allow_scores: false,
     scoring_high_wins: false,
     scoring_max_players: 1,
+    allow_mulligans: false,
     require_contact: false,
     require_staff_confirmation: false
   });
@@ -284,6 +285,7 @@ export default function PassportAdmin() {
         allow_scores: false,
         scoring_high_wins: false,
         scoring_max_players: 1,
+        allow_mulligans: false,
         require_contact: false,
         require_staff_confirmation: false
       });
@@ -360,6 +362,11 @@ export default function PassportAdmin() {
     if (typeof window === "undefined") return selectedPassport.public_slug;
     return `${window.location.origin}/p/${selectedPassport.public_slug}`;
   }, [selectedPassport?.public_slug]);
+
+  const mulliganUrl = useMemo(() => {
+    if (!publicUrl || !selectedPassport?.mulligan_qr_token) return null;
+    return `${publicUrl}?mulligan=${selectedPassport.mulligan_qr_token}`;
+  }, [publicUrl, selectedPassport?.mulligan_qr_token]);
 
   const handleCreate = () => {
     createMutation.mutate({
@@ -479,7 +486,8 @@ export default function PassportAdmin() {
           required_stops: report.passport?.required_stops_count ?? "",
           total_participants: report.summary?.total_participants ?? 0,
           completed_passports: report.summary?.completed_passports ?? 0,
-          started_not_finished: report.summary?.started_not_finished ?? 0
+          started_not_finished: report.summary?.started_not_finished ?? 0,
+          mulligan_scans: report.summary?.mulligan_scans ?? 0
         }
       ];
       XLSX.utils.book_append_sheet(
@@ -505,6 +513,14 @@ export default function PassportAdmin() {
           workbook,
           XLSX.utils.json_to_sheet(report.scores),
           "Scores"
+        );
+      }
+
+      if (report.mulligans && report.mulligans.length > 0) {
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(report.mulligans),
+          "Mulligans"
         );
       }
 
@@ -682,6 +698,20 @@ export default function PassportAdmin() {
                       value={form.scoring_max_players}
                       onChange={(event) =>
                         setForm({ ...form, scoring_max_players: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium">Allow mulligans</div>
+                      <div className="text-xs text-slate-500">
+                        Generate a QR code for mulligan tickets.
+                      </div>
+                    </div>
+                    <Switch
+                      checked={form.allow_mulligans}
+                      onCheckedChange={(checked) =>
+                        setForm({ ...form, allow_mulligans: checked })
                       }
                     />
                   </div>
@@ -1064,36 +1094,77 @@ export default function PassportAdmin() {
                       />
                     </div>
                     {selectedPassport.allow_scores && (
-                      <div className="grid md:grid-cols-2 gap-3 pt-2">
-                        <select
-                          value={selectedPassport.scoring_high_wins ? "high" : "low"}
-                          disabled={selectedPassport.status !== "draft"}
-                          onChange={(event) =>
-                            updateMutation.mutate({
-                              id: selectedPassport.id,
-                              data: {
-                                scoring_high_wins: event.target.value === "high"
-                              }
-                            })
-                          }
-                          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                        >
-                          <option value="low">Low score wins</option>
-                          <option value="high">High score wins</option>
-                        </select>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="8"
-                          value={selectedPassport.scoring_max_players || 1}
-                          disabled={selectedPassport.status !== "draft"}
-                          onChange={(event) =>
-                            updateMutation.mutate({
-                              id: selectedPassport.id,
-                              data: { scoring_max_players: event.target.value }
-                            })
-                          }
-                        />
+                      <div className="space-y-3 pt-2">
+                        <div className="grid md:grid-cols-2 gap-3">
+                          <select
+                            value={selectedPassport.scoring_high_wins ? "high" : "low"}
+                            disabled={selectedPassport.status !== "draft"}
+                            onChange={(event) =>
+                              updateMutation.mutate({
+                                id: selectedPassport.id,
+                                data: {
+                                  scoring_high_wins: event.target.value === "high"
+                                }
+                              })
+                            }
+                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                          >
+                            <option value="low">Low score wins</option>
+                            <option value="high">High score wins</option>
+                          </select>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="8"
+                            value={selectedPassport.scoring_max_players || 1}
+                            disabled={selectedPassport.status !== "draft"}
+                            onChange={(event) =>
+                              updateMutation.mutate({
+                                id: selectedPassport.id,
+                                data: { scoring_max_players: event.target.value }
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                          <div>
+                            <div className="text-sm font-medium">Allow mulligans</div>
+                            <div className="text-xs text-slate-500">
+                              Locked after publish.
+                            </div>
+                          </div>
+                          <Switch
+                            checked={selectedPassport.allow_mulligans}
+                            disabled={selectedPassport.status !== "draft"}
+                            onCheckedChange={(checked) =>
+                              updateMutation.mutate({
+                                id: selectedPassport.id,
+                                data: { allow_mulligans: checked }
+                              })
+                            }
+                          />
+                        </div>
+                        {selectedPassport.allow_mulligans && mulliganUrl && (
+                          <div className="rounded-lg border px-3 py-2 text-xs text-slate-600">
+                            <div className="font-medium text-slate-800">
+                              Mulligan QR link
+                            </div>
+                            <div className="break-all">{mulliganUrl}</div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-2"
+                              onClick={() => {
+                                navigator.clipboard
+                                  ?.writeText(mulliganUrl)
+                                  .then(() => toast.success("Mulligan link copied"))
+                                  .catch(() => toast.error("Unable to copy link"));
+                              }}
+                            >
+                              Copy link
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

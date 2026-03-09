@@ -304,6 +304,13 @@ export function stampPassportInstance(token, data) {
   });
 }
 
+export function logPassportMulligan(token, data) {
+  return apiFetch(`/p/instance/${token}/mulligan`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
 export function savePassportTeam(token, data) {
   return apiFetch(`/p/instance/${token}/team`, {
     method: "POST",

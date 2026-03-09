@@ -6,6 +6,7 @@ import {
   getPublicPassport,
   getPublicSystemSettings,
   getPassportLeaderboard,
+  logPassportMulligan,
   savePassportTeam,
   stampPassportInstance,
   submitPassportScores,
@@ -25,6 +26,7 @@ export default function PassportPublic() {
   const [searchParams, setSearchParams] = useSearchParams();
   const qrToken = searchParams.get("qr");
   const bonusToken = searchParams.get("bonus");
+  const mulliganToken = searchParams.get("mulligan");
   const tokenKey = slug ? `passport_token_${slug}` : "passport_token";
 
   const [passport, setPassport] = useState(null);
@@ -151,21 +153,29 @@ export default function PassportPublic() {
 
   useEffect(() => {
     const stampIfNeeded = async () => {
-      if ((!qrToken && !bonusToken) || !instance?.token) return;
+      if ((!qrToken && !bonusToken && !mulliganToken) || !instance?.token) return;
       try {
-        await stampPassportInstance(instance.token, {
-          ...(bonusToken ? { bonus_qr_token: bonusToken } : { qr_token: qrToken })
-        });
-        const detail = await getPassportInstance(instance.token);
-        setStamps(detail.stamps || []);
-        setEntryCount(detail.entry_count || 0);
-        setStops(detail.stops || []);
-        toast.success("Stamp recorded!");
+        if (mulliganToken) {
+          await logPassportMulligan(instance.token, {
+            mulligan_qr_token: mulliganToken
+          });
+          toast.success("Mulligan recorded!");
+        } else {
+          await stampPassportInstance(instance.token, {
+            ...(bonusToken ? { bonus_qr_token: bonusToken } : { qr_token: qrToken })
+          });
+          const detail = await getPassportInstance(instance.token);
+          setStamps(detail.stamps || []);
+          setEntryCount(detail.entry_count || 0);
+          setStops(detail.stops || []);
+          toast.success("Stamp recorded!");
+        }
         setActiveTab("stops");
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete("qr");
           next.delete("bonus");
+          next.delete("mulligan");
           return next;
         });
       } catch (err) {
@@ -180,12 +190,13 @@ export default function PassportPublic() {
           const next = new URLSearchParams(prev);
           next.delete("qr");
           next.delete("bonus");
+          next.delete("mulligan");
           return next;
         });
       }
     };
     stampIfNeeded();
-  }, [qrToken, bonusToken, instance?.token]);
+  }, [qrToken, bonusToken, mulliganToken, instance?.token]);
 
   useEffect(() => {
     if (!scoringEnabled) return;
@@ -197,11 +208,11 @@ export default function PassportPublic() {
   }, [scoringEnabled, maxPlayers]);
 
   const parseScanToken = (decodedText) => {
-    if (!decodedText) return { token: "", isBonus: false };
+    if (!decodedText) return { token: "", scanType: "stamp" };
     try {
       const url = new URL(decodedText);
       let token = "";
-      let isBonus = false;
+      let scanType = "stamp";
       for (const [key, value] of url.searchParams.entries()) {
         const lowerKey = key.toLowerCase();
         if (lowerKey === "qr") {
@@ -210,18 +221,24 @@ export default function PassportPublic() {
         }
         if (lowerKey === "bonus") {
           token = value;
-          isBonus = true;
+          scanType = "bonus";
+          break;
+        }
+        if (lowerKey === "mulligan") {
+          token = value;
+          scanType = "mulligan";
           break;
         }
       }
-      return { token: token || decodedText, isBonus };
+      return { token: token || decodedText, scanType };
     } catch {
-      const match = decodedText.match(/[?&](qr|bonus)=([^&]+)/i);
+      const match = decodedText.match(/[?&](qr|bonus|mulligan)=([^&]+)/i);
       if (match) {
-        const isBonus = match[1].toLowerCase() === "bonus";
-        return { token: decodeURIComponent(match[2]), isBonus };
+        const type = match[1].toLowerCase();
+        const scanType = type === "bonus" ? "bonus" : type === "mulligan" ? "mulligan" : "stamp";
+        return { token: decodeURIComponent(match[2]), scanType };
       }
-      return { token: decodedText, isBonus: false };
+      return { token: decodedText, scanType: "stamp" };
     }
   };
 
@@ -230,18 +247,32 @@ export default function PassportPublic() {
     try {
       setScannerStatus("working");
       setScannerMessage("Checking in…");
-      const { token: tokenValue, isBonus } = parseScanToken(decodedText);
-      await stampPassportInstance(instance.token, {
-        ...(isBonus ? { bonus_qr_token: tokenValue } : { qr_token: tokenValue })
-      });
-      const detail = await getPassportInstance(instance.token);
-      setStamps(detail.stamps || []);
-      setEntryCount(detail.entry_count || 0);
-      setStops(detail.stops || []);
+      const { token: tokenValue, scanType } = parseScanToken(decodedText);
+      if (scanType === "mulligan") {
+        await logPassportMulligan(instance.token, {
+          mulligan_qr_token: tokenValue
+        });
+      } else {
+        await stampPassportInstance(instance.token, {
+          ...(scanType === "bonus"
+            ? { bonus_qr_token: tokenValue }
+            : { qr_token: tokenValue })
+        });
+        const detail = await getPassportInstance(instance.token);
+        setStamps(detail.stamps || []);
+        setEntryCount(detail.entry_count || 0);
+        setStops(detail.stops || []);
+      }
       setScannerStatus("success");
-      setScannerMessage(isBonus ? "Bonus entry added!" : "Stamp recorded! Nice work.");
-      toast.success("Stamp recorded!");
-      if (soundSettings.task_completion_sound_url && !isBonus) {
+      const successMessage =
+        scanType === "bonus"
+          ? "Bonus entry added!"
+          : scanType === "mulligan"
+          ? "Mulligan recorded!"
+          : "Stamp recorded! Nice work.";
+      setScannerMessage(successMessage);
+      toast.success(successMessage);
+      if (soundSettings.task_completion_sound_url && scanType === "stamp") {
         new Audio(soundSettings.task_completion_sound_url).play().catch(() => {});
       }
       setActiveTab("stops");
@@ -254,6 +285,10 @@ export default function PassportPublic() {
         message = "That QR code doesn't match this passport.";
       } else if (raw.toLowerCase().includes("bonus entries")) {
         message = "Bonus entries are not enabled for this passport.";
+      } else if (raw.toLowerCase().includes("mulligans")) {
+        message = "Mulligans are not enabled for this passport.";
+      } else if (raw.toLowerCase().includes("mulligan token")) {
+        message = "That mulligan QR code doesn't match this passport.";
       } else if (raw.includes("HTTP 404")) {
         message = "Stamping is temporarily unavailable. Please try again in a moment.";
       }
