@@ -71,12 +71,12 @@ export default function PassportPublic() {
   const scoringEnabled = Boolean(passport?.allow_scores);
   const maxPlayers = Number(passport?.scoring_max_players) || 1;
   const needsTeamSetup = scoringEnabled && (!team || players.length === 0);
-  const requiredStops =
+  const requiredStopsForSubmit =
     passport?.required_stops_count == null ? stops.length : passport.required_stops_count;
   const canSubmit =
     submission == null &&
-    requiredStops > 0 &&
-    visitedStopIds.size >= requiredStops &&
+    requiredStopsForSubmit > 0 &&
+    visitedStopIds.size >= requiredStopsForSubmit &&
     (!passport?.require_contact || contactSaved) &&
     !needsTeamSetup;
 
