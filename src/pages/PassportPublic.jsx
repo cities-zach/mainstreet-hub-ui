@@ -9,6 +9,7 @@ import {
   logPassportMulligan,
   savePassportTeam,
   stampPassportInstance,
+  submitPassport,
   submitPassportScores,
   updatePassportInstance
 } from "@/api";
@@ -53,6 +54,10 @@ export default function PassportPublic() {
   const [teamForm, setTeamForm] = useState({ team_name: "", players: [] });
   const [teamSaving, setTeamSaving] = useState(false);
   const [scoreInputs, setScoreInputs] = useState({});
+  const [submissionQuestions, setSubmissionQuestions] = useState([]);
+  const [submissionAnswers, setSubmissionAnswers] = useState({});
+  const [submission, setSubmission] = useState(null);
+  const [submissionSaving, setSubmissionSaving] = useState(false);
   const [soundSettings, setSoundSettings] = useState({
     task_completion_sound_url: "",
     level_up_sound_url: ""
@@ -66,6 +71,14 @@ export default function PassportPublic() {
   const scoringEnabled = Boolean(passport?.allow_scores);
   const maxPlayers = Number(passport?.scoring_max_players) || 1;
   const needsTeamSetup = scoringEnabled && (!team || players.length === 0);
+  const requiredStops =
+    passport?.required_stops_count == null ? stops.length : passport.required_stops_count;
+  const canSubmit =
+    submission == null &&
+    requiredStops > 0 &&
+    visitedStopIds.size >= requiredStops &&
+    (!passport?.require_contact || contactSaved) &&
+    !needsTeamSetup;
 
   const scoreMap = useMemo(() => {
     const map = new Map();
@@ -117,6 +130,8 @@ export default function PassportPublic() {
         setTeam(detail.team || null);
         setPlayers(detail.players || []);
         setScores(detail.scores || []);
+        setSubmissionQuestions(detail.submission_questions || []);
+        setSubmission(detail.submission || null);
         if (detail.instance) {
           setContactForm({
             contact_name: detail.instance.contact_name || "",
@@ -381,6 +396,28 @@ export default function PassportPublic() {
     }
   };
 
+  const handleSubmissionAnswer = (questionId, value) => {
+    setSubmissionAnswers((prev) => ({ ...prev, [questionId]: value }));
+  };
+
+  const handleSubmitPassport = async () => {
+    if (!instance?.token || !canSubmit) return;
+    try {
+      setSubmissionSaving(true);
+      const answers = submissionQuestions.map((question) => ({
+        question_id: question.id,
+        answer: submissionAnswers?.[question.id] || ""
+      }));
+      const res = await submitPassport(instance.token, { answers });
+      setSubmission(res.submission || null);
+      toast.success("Passport submitted!");
+    } catch (err) {
+      toast.error(err.message || "Unable to submit passport.");
+    } finally {
+      setSubmissionSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab !== "leaderboard" || !instance?.token || !scoringEnabled) return;
     getPassportLeaderboard(instance.token)
@@ -531,6 +568,14 @@ export default function PassportPublic() {
             >
               Scanner
             </Button>
+            {(passport.collect_submission_questions || canSubmit || submission) && (
+              <Button
+                variant={activeTab === "submit" ? "default" : "outline"}
+                onClick={() => setActiveTab("submit")}
+              >
+                Submit
+              </Button>
+            )}
             {scoringEnabled && (
               <Button
                 variant={activeTab === "leaderboard" ? "default" : "outline"}
@@ -743,6 +788,50 @@ export default function PassportPublic() {
                 }}
                 onScan={handleScanResult}
               />
+            </CardContent>
+          </Card>
+        )}
+
+        {(!requireContact || contactSaved) && !needsTeamSetup && activeTab === "submit" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Submit passport</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!canSubmit && (
+                <div className="text-sm text-slate-500">
+                  Complete the required stops before submitting.
+                </div>
+              )}
+              {submission && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+                  Passport submitted. Thank you!
+                </div>
+              )}
+              {canSubmit && !submission && (
+                <div className="space-y-3">
+                  {submissionQuestions.length === 0 && (
+                    <div className="text-sm text-slate-500">
+                      No submission questions required. Submit when ready.
+                    </div>
+                  )}
+                  {submissionQuestions.map((question) => (
+                    <div key={question.id} className="space-y-1">
+                      <div className="text-sm font-medium">{question.prompt}</div>
+                      <Input
+                        value={submissionAnswers?.[question.id] || ""}
+                        onChange={(event) =>
+                          handleSubmissionAnswer(question.id, event.target.value)
+                        }
+                        placeholder="Your answer"
+                      />
+                    </div>
+                  ))}
+                  <Button onClick={handleSubmitPassport} disabled={submissionSaving}>
+                    {submissionSaving ? "Submitting..." : "Submit passport"}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

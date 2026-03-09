@@ -278,6 +278,13 @@ export function geocodeAddress(address) {
   });
 }
 
+export function submitPassport(token, data) {
+  return apiFetch(`/p/instance/${token}/submit`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
 // ----------------------
 // Passport (public)
 // ----------------------

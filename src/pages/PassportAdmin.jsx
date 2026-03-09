@@ -212,10 +212,12 @@ export default function PassportAdmin() {
     allow_scores: false,
     scoring_high_wins: false,
     scoring_max_players: 1,
+    collect_submission_questions: false,
     allow_mulligans: false,
     require_contact: false,
     require_staff_confirmation: false
   });
+  const [submissionQuestions, setSubmissionQuestions] = useState([]);
   const [stopForm, setStopForm] = useState({
     name: "",
     address_text: "",
@@ -285,6 +287,7 @@ export default function PassportAdmin() {
         allow_scores: false,
         scoring_high_wins: false,
         scoring_max_players: 1,
+        collect_submission_questions: false,
         allow_mulligans: false,
         require_contact: false,
         require_staff_confirmation: false
@@ -356,6 +359,10 @@ export default function PassportAdmin() {
   const selectedPassport = passportDetail?.passport;
   const stops = passportDetail?.stops || [];
   const stats = passportDetail?.stats || {};
+  useEffect(() => {
+    if (!selectedPassport) return;
+    setSubmissionQuestions(passportDetail?.submission_questions || []);
+  }, [selectedPassport?.id, passportDetail?.submission_questions]);
 
   const publicUrl = useMemo(() => {
     if (!selectedPassport?.public_slug) return null;
@@ -487,7 +494,8 @@ export default function PassportAdmin() {
           total_participants: report.summary?.total_participants ?? 0,
           completed_passports: report.summary?.completed_passports ?? 0,
           started_not_finished: report.summary?.started_not_finished ?? 0,
-          mulligan_scans: report.summary?.mulligan_scans ?? 0
+          mulligan_scans: report.summary?.mulligan_scans ?? 0,
+          submissions: report.summary?.submissions ?? 0
         }
       ];
       XLSX.utils.book_append_sheet(
@@ -521,6 +529,18 @@ export default function PassportAdmin() {
           workbook,
           XLSX.utils.json_to_sheet(report.mulligans),
           "Mulligans"
+        );
+      }
+
+      if (report.submissions && report.submissions.length > 0) {
+        const submissionRows = report.submissions.map((row) => ({
+          ...row,
+          answers: row.answers ? JSON.stringify(row.answers) : "[]"
+        }));
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(submissionRows),
+          "Submissions"
         );
       }
 
@@ -656,6 +676,7 @@ export default function PassportAdmin() {
                 {[
                   ["allow_extra_entries", "Allow extra entries"],
                   ["allow_scores", "Allow scoring"],
+                  ["collect_submission_questions", "Collect submission questions"],
                   ["require_contact", "Require contact info"],
                   ["require_staff_confirmation", "Require staff confirmation"]
                 ].map(([key, label]) => (
@@ -717,6 +738,13 @@ export default function PassportAdmin() {
                   </div>
                 </div>
               )}
+              {form.collect_submission_questions && (
+                <div className="space-y-2 rounded-lg border p-3 text-sm">
+                  <div className="text-xs text-slate-500">
+                    Add submission questions after creating the passport.
+                  </div>
+                </div>
+              )}
               <Button className="w-full" onClick={handleCreate} disabled={!form.title}>
                 Create passport
               </Button>
@@ -755,6 +783,10 @@ export default function PassportAdmin() {
                     <div className="rounded-xl border p-3 text-sm">
                       <div className="text-slate-500">Entries</div>
                       <div className="text-lg font-semibold">{stats.entries || 0}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-sm">
+                      <div className="text-slate-500">Submissions</div>
+                      <div className="text-lg font-semibold">{stats.submissions || 0}</div>
                     </div>
                   </div>
                   {publicUrl && (
@@ -1165,6 +1197,83 @@ export default function PassportAdmin() {
                             </Button>
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2 rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-medium">Collect submission questions</div>
+                        <div className="text-xs text-slate-500">
+                          Locked after publish.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={selectedPassport.collect_submission_questions}
+                        disabled={selectedPassport.status !== "draft"}
+                        onCheckedChange={(checked) =>
+                          updateMutation.mutate({
+                            id: selectedPassport.id,
+                            data: { collect_submission_questions: checked }
+                          })
+                        }
+                      />
+                    </div>
+                    {selectedPassport.collect_submission_questions && (
+                      <div className="space-y-2">
+                        {submissionQuestions.map((question, index) => (
+                          <div key={question.id || index} className="flex gap-2">
+                            <Input
+                              value={question.prompt || ""}
+                              placeholder={`Question ${index + 1}`}
+                              disabled={selectedPassport.status !== "draft"}
+                              onChange={(event) => {
+                                const next = [...submissionQuestions];
+                                next[index] = { ...next[index], prompt: event.target.value };
+                                setSubmissionQuestions(next);
+                              }}
+                            />
+                            <Button
+                              variant="outline"
+                              disabled={selectedPassport.status !== "draft"}
+                              onClick={() => {
+                                setSubmissionQuestions((prev) =>
+                                  prev.filter((_, idx) => idx !== index)
+                                );
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            disabled={selectedPassport.status !== "draft"}
+                            onClick={() =>
+                              setSubmissionQuestions((prev) => [
+                                ...prev,
+                                { prompt: "", is_active: true }
+                              ])
+                            }
+                          >
+                            Add question
+                          </Button>
+                          <Button
+                            disabled={selectedPassport.status !== "draft"}
+                            onClick={() =>
+                              updateMutation.mutate({
+                                id: selectedPassport.id,
+                                data: {
+                                  submission_questions: submissionQuestions,
+                                  collect_submission_questions: true
+                                }
+                              })
+                            }
+                          >
+                            Save questions
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
