@@ -1205,12 +1205,11 @@ export default function PassportAdmin() {
                       <div>
                         <div className="font-medium">Collect submission questions</div>
                         <div className="text-xs text-slate-500">
-                          Locked after publish.
+                          Can be updated after publish.
                         </div>
                       </div>
                       <Switch
                         checked={selectedPassport.collect_submission_questions}
-                        disabled={selectedPassport.status !== "draft"}
                         onCheckedChange={(checked) =>
                           updateMutation.mutate({
                             id: selectedPassport.id,
@@ -1226,7 +1225,6 @@ export default function PassportAdmin() {
                             <Input
                               value={question.prompt || ""}
                               placeholder={`Question ${index + 1}`}
-                              disabled={selectedPassport.status !== "draft"}
                               onChange={(event) => {
                                 const next = [...submissionQuestions];
                                 next[index] = { ...next[index], prompt: event.target.value };
@@ -1235,7 +1233,6 @@ export default function PassportAdmin() {
                             />
                             <Button
                               variant="outline"
-                              disabled={selectedPassport.status !== "draft"}
                               onClick={() => {
                                 setSubmissionQuestions((prev) =>
                                   prev.filter((_, idx) => idx !== index)
@@ -1249,7 +1246,6 @@ export default function PassportAdmin() {
                         <div className="flex flex-wrap gap-2">
                           <Button
                             variant="outline"
-                            disabled={selectedPassport.status !== "draft"}
                             onClick={() =>
                               setSubmissionQuestions((prev) => [
                                 ...prev,
@@ -1260,7 +1256,6 @@ export default function PassportAdmin() {
                             Add question
                           </Button>
                           <Button
-                            disabled={selectedPassport.status !== "draft"}
                             onClick={() =>
                               updateMutation.mutate({
                                 id: selectedPassport.id,
