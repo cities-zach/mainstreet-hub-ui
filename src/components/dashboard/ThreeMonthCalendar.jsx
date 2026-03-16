@@ -1,5 +1,18 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
+import { format, isValid, parseISO } from "date-fns";
+
+function formatEventDate(event) {
+  if (event.start_date) {
+    const parsed = parseISO(event.start_date);
+    return isValid(parsed) ? format(parsed, "yyyy-MM-dd") : event.start_date;
+  }
+  if (event.starts_at) {
+    const parsed = new Date(event.starts_at);
+    return isValid(parsed) ? format(parsed, "yyyy-MM-dd") : event.starts_at;
+  }
+  return "Date TBD";
+}
 
 export default function ThreeMonthCalendar({ events = [] }) {
   return (
@@ -21,9 +34,7 @@ export default function ThreeMonthCalendar({ events = [] }) {
               className="p-2 rounded border border-slate-200 text-sm"
             >
               <p className="font-medium">{event.name}</p>
-              <p className="text-slate-500">
-                {event.start_date || event.starts_at || "Date TBD"}
-              </p>
+              <p className="text-slate-500">{formatEventDate(event)}</p>
             </div>
           ))
         )}
