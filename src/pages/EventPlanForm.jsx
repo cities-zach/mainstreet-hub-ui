@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Save, Send, CheckCircle, Download } from "lucide-react";
+import { ArrowLeft, Save, Send, CheckCircle, Download, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import OverviewSection from "@/components/masterplanner/OverviewSection";
@@ -163,6 +163,19 @@ export default function EventPlanForm() {
     }
   };
 
+  const handleReopenDraft = async () => {
+    try {
+      const updated = await apiFetch(`/events/${eventId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "draft" }),
+      });
+      setFormData(updated);
+      toast.success("Event moved back to draft");
+    } catch (err) {
+      toast.error("Failed to move event back to draft");
+    }
+  };
+
   if (loading) return <div className="p-8 text-center">Loading event plan...</div>;
 
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
@@ -171,6 +184,7 @@ export default function EventPlanForm() {
     eventId &&
     ["draft", "pending_review", "changes_requested"].includes(formData.status);
   const canFinish = eventId && formData.status === "approved" && (isAdmin || isChampion);
+  const canReopenDraft = eventId && formData.status === "finished" && (isAdmin || isChampion);
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100">
@@ -207,6 +221,15 @@ export default function EventPlanForm() {
               >
                 <CheckCircle className="w-4 h-4" />
                 Event Finished
+              </Button>
+            )}
+            {canReopenDraft && (
+              <Button
+                onClick={handleReopenDraft}
+                className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reopen as Draft
               </Button>
             )}
             <Button
