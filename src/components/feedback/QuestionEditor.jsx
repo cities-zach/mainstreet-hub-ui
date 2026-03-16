@@ -58,7 +58,8 @@ export default function QuestionEditor({
     onChange?.(updates);
   };
 
-  const qType = question.question_type || "scale";
+  const rawType = question.question_type || "scale";
+  const qType = rawType === "short_text" ? "text" : rawType;
 
   const QUESTION_TYPES = useMemo(
     () => [
