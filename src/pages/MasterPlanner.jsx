@@ -48,7 +48,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { format, isValid } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 
 /* ---------------- COMPONENT ---------------- */
 
@@ -291,9 +291,18 @@ export default function MasterPlanner() {
                   <CardContent className="space-y-2 flex-1 text-sm text-slate-500">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
-                      {isValid(new Date(event.start_date || event.starts_at))
-                        ? format(new Date(event.start_date || event.starts_at), "MMM d, yyyy")
-                        : "Date TBD"}
+                      {(() => {
+                        if (event.start_date) {
+                          const parsed = parseISO(event.start_date);
+                          return isValid(parsed)
+                            ? format(parsed, "MMM d, yyyy")
+                            : "Date TBD";
+                        }
+                        const fallback = new Date(event.starts_at);
+                        return isValid(fallback)
+                          ? format(fallback, "MMM d, yyyy")
+                          : "Date TBD";
+                      })()}
                     </div>
                     {event.location && (
                       <div className="flex items-center gap-2">
