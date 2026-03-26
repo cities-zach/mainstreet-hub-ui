@@ -138,6 +138,7 @@ function AppInner() {
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/p/:slug" element={<PassportPublic />} />
+          <Route path="/feedback/public" element={<PublicSurvey />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
