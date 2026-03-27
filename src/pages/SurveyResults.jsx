@@ -4,8 +4,85 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Users, BarChart3 } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, Download } from "lucide-react";
 import ResponseSummary from "@/components/feedback/ResponseSummary";
+
+function normalizeAnswerValue(response) {
+  if (response?.answer_text != null && response.answer_text !== "") {
+    return String(response.answer_text);
+  }
+  if (response?.answer_number != null) {
+    return String(response.answer_number);
+  }
+  if (response?.answer_json != null) {
+    const value = response.answer_json;
+    if (Array.isArray(value)) return value.map((item) => String(item)).join("; ");
+    if (value && typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  }
+  return "";
+}
+
+function escapeCsvValue(value) {
+  const text = value == null ? "" : String(value);
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function buildSurveyCsv({ survey, questions, responses }) {
+  const questionList = Array.isArray(questions) ? questions : [];
+  const responseList = Array.isArray(responses) ? responses : [];
+
+  const headers = [
+    "submission_id",
+    "submitted_at",
+    ...questionList.map((q) => q.question_text || q.id)
+  ];
+
+  const responsesBySubmission = new Map();
+  responseList.forEach((response) => {
+    if (!response?.submission_id) return;
+    if (!responsesBySubmission.has(response.submission_id)) {
+      responsesBySubmission.set(response.submission_id, {
+        submission_id: response.submission_id,
+        submitted_at: response.created_at ?? "",
+        answers: {}
+      });
+    }
+    const entry = responsesBySubmission.get(response.submission_id);
+    entry.answers[response.question_id] = normalizeAnswerValue(response);
+    if (!entry.submitted_at && response.created_at) {
+      entry.submitted_at = response.created_at;
+    }
+  });
+
+  const rows = [];
+  for (const entry of responsesBySubmission.values()) {
+    const row = [
+      entry.submission_id,
+      entry.submitted_at,
+      ...questionList.map((q) => entry.answers[q.id] ?? "")
+    ];
+    rows.push(row);
+  }
+
+  const csvLines = [
+    headers.map(escapeCsvValue).join(","),
+    ...rows.map((row) => row.map(escapeCsvValue).join(","))
+  ];
+  const filenameBase = (survey?.title || "survey-results")
+    .toString()
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return {
+    csv: csvLines.join("\n"),
+    filename: `${filenameBase || "survey-results"}.csv`
+  };
+}
 
 export default function SurveyResults() {
   const navigate = useNavigate();
@@ -36,7 +113,24 @@ export default function SurveyResults() {
 
   const uniqueSubmissions = [
     ...new Set((responses || []).map(r => r.submission_id))
-  ];
+  ].filter(Boolean);
+
+  const handleExportCsv = () => {
+    const { csv, filename } = buildSurveyCsv({
+      survey,
+      questions,
+      responses
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 transition-colors duration-300">
@@ -59,11 +153,22 @@ export default function SurveyResults() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm">
-            <Users className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-            <span className="font-semibold">
-              {uniqueSubmissions.length} Responses
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm">
+              <Users className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+              <span className="font-semibold">
+                {uniqueSubmissions.length} Responses
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              className="gap-2"
+              disabled={uniqueSubmissions.length === 0}
+              onClick={handleExportCsv}
+            >
+              <Download className="w-4 h-4" />
+              Download CSV
+            </Button>
           </div>
         </div>
 
