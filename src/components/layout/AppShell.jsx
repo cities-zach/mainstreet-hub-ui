@@ -18,6 +18,7 @@ import {
   Sparkles,
   MapPin,
   MessageSquare,
+  Camera,
 } from "lucide-react";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,10 @@ export default function AppShell({ me }) {
     { label: "Chat", to: "/chat", icon: MessageSquare },
     { label: "Passport", to: "/passports", icon: MapPin },
     ...(isAdmin
-      ? [{ label: "WheelSpin", to: "/wheelspin", icon: Sparkles }]
+      ? [
+          { label: "WheelSpin", to: "/wheelspin", icon: Sparkles },
+          { label: "PhotoBooth", to: "/photobooth", icon: Camera },
+        ]
       : []),
     { label: "RAGTime", to: "/ragtime", icon: BookOpen },
   ];

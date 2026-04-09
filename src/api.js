@@ -199,6 +199,52 @@ export function getPassports() {
   return apiFetch("/passports");
 }
 
+// ----------------------
+// PhotoBooth
+// ----------------------
+
+export function getPhotoBoothEvents() {
+  return apiFetch("/photobooth/events");
+}
+
+export function createPhotoBoothEvent(data) {
+  return apiFetch("/photobooth/events", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function updatePhotoBoothEvent(id, data) {
+  return apiFetch(`/photobooth/events/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
+}
+
+export function getPhotoBoothPhotos(eventId) {
+  return apiFetch(`/photobooth/events/${eventId}/photos`);
+}
+
+export function createPhotoBoothSession(eventId, data) {
+  return apiFetch(`/photobooth/events/${eventId}/session`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function uploadPhotoBoothPhoto(eventId, formData) {
+  return apiFetch(`/photobooth/events/${eventId}/photos`, {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function approvePhotoBoothPhoto(photoId) {
+  return apiFetch(`/photobooth/photos/${photoId}/approve`, {
+    method: "POST"
+  });
+}
+
 export function getPassport(id) {
   return apiFetch(`/passports/${id}`);
 }

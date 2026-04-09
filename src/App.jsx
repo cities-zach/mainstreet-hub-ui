@@ -43,6 +43,7 @@ import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
 import PassportAdmin from "@/pages/PassportAdmin";
 import PassportPublic from "@/pages/PassportPublic";
 import Chat from "@/pages/Chat";
+import PhotoBooth from "@/pages/PhotoBooth";
 
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
@@ -239,6 +240,7 @@ function AppInner() {
 
           {/* ---------- PASSPORTS ---------- */}
           <Route path="/passports" element={<PassportAdmin />} />
+          <Route path="/photobooth" element={<PhotoBooth />} />
 
           {/* ---------- SETTINGS ---------- */}
           <Route
