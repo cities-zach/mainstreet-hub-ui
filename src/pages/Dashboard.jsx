@@ -52,6 +52,25 @@ export default function Dashboard({ me }) {
     queryFn: () => apiFetch("/events"),
   });
 
+  const upcomingEvents = React.useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const threeMonthsOut = new Date(startOfToday);
+    threeMonthsOut.setMonth(threeMonthsOut.getMonth() + 3);
+    const excludedStatuses = new Set(["finished", "cancelled", "archived", "completed"]);
+
+    return (events || []).filter((event) => {
+      if (excludedStatuses.has((event.status || "").toLowerCase())) return false;
+      const startDateValue = event.start_date
+        ? new Date(`${event.start_date}T00:00:00`)
+        : event.starts_at
+          ? new Date(event.starts_at)
+          : null;
+      if (!startDateValue || Number.isNaN(startDateValue.getTime())) return false;
+      return startDateValue >= startOfToday && startDateValue < threeMonthsOut;
+    });
+  }, [events]);
+
   const modules = [
     {
       title: "MasterPlanner",
@@ -148,7 +167,7 @@ export default function Dashboard({ me }) {
           </p>
         </div>
 
-        <ThreeMonthCalendar events={events} />
+        <ThreeMonthCalendar events={upcomingEvents} />
 
         <div>
           <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">
