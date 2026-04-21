@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   createPassportInstance,
+  createPassportCheckout,
   getPassportInstance,
   getPublicPassport,
   getPublicSystemSettings,
@@ -28,6 +29,7 @@ export default function PassportPublic() {
   const qrToken = searchParams.get("qr");
   const bonusToken = searchParams.get("bonus");
   const mulliganToken = searchParams.get("mulligan");
+  const paymentSessionId = searchParams.get("session_id");
   const tokenKey = slug ? `passport_token_${slug}` : "passport_token";
 
   const [passport, setPassport] = useState(null);
@@ -58,6 +60,9 @@ export default function PassportPublic() {
   const [submissionAnswers, setSubmissionAnswers] = useState({});
   const [submission, setSubmission] = useState(null);
   const [submissionSaving, setSubmissionSaving] = useState(false);
+  const [paymentRequired, setPaymentRequired] = useState(false);
+  const [paymentEmail, setPaymentEmail] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [soundSettings, setSoundSettings] = useState({
     task_completion_sound_url: "",
     level_up_sound_url: ""
@@ -99,6 +104,7 @@ export default function PassportPublic() {
         if (!isMounted) return;
         setPassport(passportData.passport);
         setStops(passportData.stops || []);
+        setPaymentRequired(false);
 
         getPublicSystemSettings()
           .then((settings) => {
@@ -112,13 +118,30 @@ export default function PassportPublic() {
 
         const existingToken =
           typeof window !== "undefined" ? localStorage.getItem(tokenKey) : null;
+        const requiresPayment =
+          passportData.passport?.is_paid && !existingToken && !paymentSessionId;
+        if (requiresPayment) {
+          setPaymentRequired(true);
+          setLoading(false);
+          return;
+        }
+
         const instanceRes = await createPassportInstance(slug, {
-          token: existingToken || undefined
+          token: existingToken || undefined,
+          payment_session_id: paymentSessionId || undefined
         });
         if (!isMounted) return;
         const nextToken = instanceRes.instance?.token;
         if (nextToken && typeof window !== "undefined") {
           localStorage.setItem(tokenKey, nextToken);
+        }
+
+        if (paymentSessionId) {
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("session_id");
+            return next;
+          });
         }
 
         const detail = await getPassportInstance(nextToken);
@@ -155,7 +178,12 @@ export default function PassportPublic() {
         }
       } catch (err) {
         if (!isMounted) return;
-        setError(err.message);
+        if (err.message?.includes("HTTP 402")) {
+          setPaymentRequired(true);
+          setError(null);
+        } else {
+          setError(err.message);
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -164,7 +192,7 @@ export default function PassportPublic() {
     return () => {
       isMounted = false;
     };
-  }, [slug]);
+  }, [slug, paymentSessionId]);
 
   useEffect(() => {
     const stampIfNeeded = async () => {
@@ -331,6 +359,25 @@ export default function PassportPublic() {
     }
   };
 
+  const handleCheckout = async () => {
+    if (!passport?.id) return;
+    try {
+      setPaymentLoading(true);
+      const res = await createPassportCheckout(passport.id, {
+        email: paymentEmail || contactForm.contact_email || undefined
+      });
+      if (res?.url) {
+        window.location.href = res.url;
+      } else {
+        toast.error("Unable to start checkout.");
+      }
+    } catch (err) {
+      toast.error(err.message || "Unable to start checkout.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const canSetupTeam =
     scoringEnabled && (!passport?.require_contact || contactSaved);
 
@@ -452,6 +499,45 @@ export default function PassportPublic() {
   }
   if (!passport) {
     return <div className="p-6 text-sm text-slate-500">Passport not found.</div>;
+  }
+  if (paymentRequired) {
+    const priceLabel =
+      passport.price_cents != null ? `$${(passport.price_cents / 100).toFixed(2)}` : "";
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <div className="max-w-xl mx-auto p-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>{passport.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {passport.banner_url && (
+                <img
+                  src={passport.banner_url}
+                  alt={`${passport.title} banner`}
+                  className="w-full h-40 rounded-xl object-cover border"
+                />
+              )}
+              <div className="text-sm text-slate-600">
+                This passport requires payment before you can start.
+              </div>
+              {priceLabel && (
+                <div className="text-lg font-semibold">Price: {priceLabel}</div>
+              )}
+              <Input
+                type="email"
+                placeholder="Email for receipt (optional)"
+                value={paymentEmail}
+                onChange={(event) => setPaymentEmail(event.target.value)}
+              />
+              <Button onClick={handleCheckout} disabled={paymentLoading}>
+                {paymentLoading ? "Opening Checkout…" : "Pay with Stripe"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (

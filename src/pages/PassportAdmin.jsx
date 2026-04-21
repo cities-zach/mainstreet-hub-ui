@@ -199,6 +199,20 @@ function StopEditor({ stop, onSave }) {
   );
 }
 
+function toCents(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return null;
+  return Math.round(numberValue * 100);
+}
+
+function formatDollars(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return "";
+  return (numberValue / 100).toFixed(2);
+}
+
 export default function PassportAdmin() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(null);
@@ -212,6 +226,8 @@ export default function PassportAdmin() {
     allow_scores: false,
     scoring_high_wins: false,
     scoring_max_players: 1,
+    is_paid: false,
+    price_dollars: "",
     collect_submission_questions: false,
     allow_mulligans: false,
     require_contact: false,
@@ -232,6 +248,7 @@ export default function PassportAdmin() {
   const [uploadingStopLogo, setUploadingStopLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [locatingStop, setLocatingStop] = useState(false);
+  const [paidPrice, setPaidPrice] = useState("");
 
   const { data: passports = [], isLoading } = useQuery({
     queryKey: ["passports"],
@@ -287,6 +304,8 @@ export default function PassportAdmin() {
         allow_scores: false,
         scoring_high_wins: false,
         scoring_max_players: 1,
+        is_paid: false,
+        price_dollars: "",
         collect_submission_questions: false,
         allow_mulligans: false,
         require_contact: false,
@@ -362,7 +381,8 @@ export default function PassportAdmin() {
   useEffect(() => {
     if (!selectedPassport) return;
     setSubmissionQuestions(passportDetail?.submission_questions || []);
-  }, [selectedPassport?.id, passportDetail?.submission_questions]);
+    setPaidPrice(formatDollars(selectedPassport.price_cents));
+  }, [selectedPassport?.id, selectedPassport?.price_cents, passportDetail?.submission_questions]);
 
   const publicUrl = useMemo(() => {
     if (!selectedPassport?.public_slug) return null;
@@ -376,12 +396,21 @@ export default function PassportAdmin() {
   }, [publicUrl, selectedPassport?.mulligan_qr_token]);
 
   const handleCreate = () => {
+    const priceCents = form.is_paid ? toCents(form.price_dollars) : null;
+    if (form.is_paid && (!priceCents || priceCents <= 0)) {
+      toast.error("Enter a price for paid passports.");
+      return;
+    }
+    const payload = { ...form };
+    delete payload.price_dollars;
     createMutation.mutate({
-      ...form,
+      ...payload,
       event_id: form.event_id || null,
       required_stops_count: form.required_stops_count
         ? Number(form.required_stops_count)
-        : null
+        : null,
+      price_cents: priceCents,
+      currency: "usd"
     });
   };
 
@@ -669,6 +698,36 @@ export default function PassportAdmin() {
                   value={form.required_stops_count}
                   onChange={(event) =>
                     setForm({ ...form, required_stops_count: event.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2 rounded-lg border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">Paid passport</div>
+                    <div className="text-xs text-slate-500">
+                      Require Stripe Checkout before play.
+                    </div>
+                  </div>
+                  <Switch
+                    checked={form.is_paid}
+                    onCheckedChange={(checked) =>
+                      setForm({
+                        ...form,
+                        is_paid: checked,
+                        price_dollars: checked ? form.price_dollars : ""
+                      })
+                    }
+                  />
+                </div>
+                <Input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  placeholder="Price (USD)"
+                  value={form.price_dollars}
+                  onChange={(event) =>
+                    setForm({ ...form, price_dollars: event.target.value })
                   }
                 />
               </div>
@@ -1104,6 +1163,53 @@ export default function PassportAdmin() {
                           data: { required_stops_count: event.target.value }
                         })
                       }
+                    />
+                  </div>
+                  <div className="space-y-2 rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-medium">Paid passport</div>
+                        <div className="text-xs text-slate-500">
+                          Require Stripe Checkout before play.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={selectedPassport.is_paid}
+                        onCheckedChange={(checked) => {
+                          const nextPriceCents = checked ? toCents(paidPrice) : null;
+                          if (checked && (!nextPriceCents || nextPriceCents <= 0)) {
+                            toast.error("Enter a price before enabling paid mode.");
+                            return;
+                          }
+                          updateMutation.mutate({
+                            id: selectedPassport.id,
+                            data: {
+                              is_paid: checked,
+                              price_cents: checked ? nextPriceCents : null,
+                              currency: "usd"
+                            }
+                          });
+                        }}
+                      />
+                    </div>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      placeholder="Price (USD)"
+                      value={paidPrice}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setPaidPrice(nextValue);
+                        const nextPriceCents = toCents(nextValue);
+                        if (!selectedPassport.is_paid) return;
+                        if (nextPriceCents && nextPriceCents > 0) {
+                          updateMutation.mutate({
+                            id: selectedPassport.id,
+                            data: { price_cents: nextPriceCents, currency: "usd" }
+                          });
+                        }
+                      }}
                     />
                   </div>
                   <div className="space-y-2 rounded-lg border p-3 text-sm">
