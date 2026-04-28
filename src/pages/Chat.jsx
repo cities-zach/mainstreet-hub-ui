@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
+  addChatChannelMembers,
   createChatChannel,
   createChatMessage,
   deleteChatChannel,
@@ -10,6 +11,7 @@ import {
   getChatMessages,
   getUserRoster,
   markChatChannelRead,
+  removeChatChannelMember,
   toggleChatReaction,
   API_BASE
 } from "@/api";
@@ -30,6 +32,7 @@ export default function Chat() {
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [showEditMembers, setShowEditMembers] = useState(false);
   const [channelType, setChannelType] = useState("channel");
   const [channelName, setChannelName] = useState("");
   const [channelMembers, setChannelMembers] = useState([]);
@@ -92,6 +95,7 @@ export default function Chat() {
 
   useEffect(() => {
     if (!selectedChannelId) return;
+    setShowEditMembers(false);
     markChatChannelRead(selectedChannelId)
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
@@ -228,11 +232,20 @@ export default function Chat() {
 
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId);
   const channelTitle = selectedChannel?.display_name || selectedChannel?.name || "Conversation";
+  const canEditMembers = !!selectedChannel;
   const canDeleteChannel =
     !!selectedChannel &&
     (selectedChannel.channel_type === "dm" ||
       me?.user?.role === "admin" ||
       me?.user?.role === "super_admin");
+  const currentMemberIds = useMemo(
+    () => new Set(channelMemberList.map((member) => member.id)),
+    [channelMemberList]
+  );
+  const availableMembers = useMemo(
+    () => roster.filter((user) => !currentMemberIds.has(user.id)),
+    [roster, currentMemberIds]
+  );
   const memberList = channelMemberList
     .map((member) => member.full_name || member.email)
     .filter(Boolean)
@@ -299,6 +312,32 @@ export default function Chat() {
       toast.success("Chat deleted");
     } catch (error) {
       toast.error(error?.message || "Unable to delete chat.");
+    }
+  };
+
+  const handleAddMember = async (userId) => {
+    if (!selectedChannelId || !userId) return;
+    try {
+      await addChatChannelMembers(selectedChannelId, [userId]);
+      queryClient.invalidateQueries({ queryKey: ["chat-members", selectedChannelId] });
+      queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+      toast.success("Member added");
+    } catch (error) {
+      toast.error(error?.message || "Unable to add member.");
+    }
+  };
+
+  const handleRemoveMember = async (user) => {
+    if (!selectedChannelId || !user?.id) return;
+    const label = user.full_name || user.email || "this member";
+    if (!window.confirm(`Remove ${label} from this channel?`)) return;
+    try {
+      await removeChatChannelMember(selectedChannelId, user.id);
+      queryClient.invalidateQueries({ queryKey: ["chat-members", selectedChannelId] });
+      queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
+      toast.success("Member removed");
+    } catch (error) {
+      toast.error(error?.message || "Unable to remove member.");
     }
   };
 
@@ -410,19 +449,83 @@ export default function Chat() {
                   </div>
                 )}
               </div>
-              {canDeleteChannel && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-red-600 border-red-200 hover:bg-red-50"
-                  onClick={handleDeleteChannel}
-                >
-                  Delete
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {canEditMembers && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowEditMembers((prev) => !prev)}
+                  >
+                    {showEditMembers ? "Done" : "Edit members"}
+                  </Button>
+                )}
+                {canDeleteChannel && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={handleDeleteChannel}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {showEditMembers && (
+              <div className="grid gap-3 rounded-lg border bg-slate-50 p-3 text-sm md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="font-medium">Current members</div>
+                  <div className="max-h-48 space-y-2 overflow-y-auto">
+                    {channelMemberList.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1"
+                      >
+                        <span className="min-w-0 truncate">
+                          {member.full_name || member.email}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoveMember(member)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="font-medium">Add members</div>
+                  <div className="max-h-48 space-y-2 overflow-y-auto">
+                    {availableMembers.map((user) => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1"
+                      >
+                        <span className="min-w-0 truncate">
+                          {user.full_name || user.email}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddMember(user.id)}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                    {availableMembers.length === 0 && (
+                      <div className="text-xs text-slate-500">
+                        Everyone in the roster is already in this channel.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {messages.length === 0 && (
                 <div className="text-sm text-slate-500">No messages yet.</div>
