@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiFetch } from "@/api";
+import { API_BASE, apiFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -211,9 +211,12 @@ export default function SurveyBuilder() {
   const surveyLink = surveyId
     ? `${window.location.origin}/feedback/public?id=${surveyId}`
     : "";
+  const surveyShareLink = surveyId
+    ? new URL(`${API_BASE}/public/surveys/${surveyId}/share`, window.location.origin).toString()
+    : "";
 
   const copyLink = () => {
-    navigator.clipboard.writeText(surveyLink);
+    navigator.clipboard.writeText(surveyShareLink || surveyLink);
     setLinkCopied(true);
     toast.success("Link copied to clipboard!");
     setTimeout(() => setLinkCopied(false), 2000);
@@ -277,7 +280,7 @@ export default function SurveyBuilder() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Input value={surveyLink} readOnly className="bg-white/90 font-mono text-sm" />
+                  <Input value={surveyShareLink} readOnly className="bg-white/90 font-mono text-sm" />
                   <Button onClick={copyLink} className="bg-[#835879] hover:bg-[#6d4a64] text-white gap-2 min-w-[120px]">
                     {linkCopied ? (
                       <>
