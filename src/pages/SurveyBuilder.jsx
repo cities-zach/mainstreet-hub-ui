@@ -51,7 +51,7 @@ export default function SurveyBuilder() {
     enabled: !!surveyId
   });
 
-  const { data: existingQuestions = [] } = useQuery({
+  const { data: existingQuestions } = useQuery({
     queryKey: ["survey_questions", surveyId],
     queryFn: () => apiFetch(`/surveys/${surveyId}/questions`),
     enabled: !!surveyId
@@ -71,7 +71,7 @@ export default function SurveyBuilder() {
   }, [existingSurvey?.id]);
 
   useEffect(() => {
-    if (!existingQuestions) return;
+    if (!Array.isArray(existingQuestions)) return;
 
     const ordered = [...existingQuestions].sort(
       (a, b) => a.order_index - b.order_index
