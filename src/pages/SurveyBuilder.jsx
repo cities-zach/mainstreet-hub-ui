@@ -212,7 +212,9 @@ export default function SurveyBuilder() {
     ? `${window.location.origin}/feedback/public?id=${surveyId}`
     : "";
   const surveyShareLink = surveyId
-    ? new URL(`${API_BASE}/public/surveys/${surveyId}/share`, window.location.origin).toString()
+    ? new URL(
+        `${API_BASE === "/api" ? "https://mainsuite.onrender.com" : API_BASE}/public/surveys/${surveyId}/share`
+      ).toString()
     : "";
 
   const copyLink = () => {

@@ -172,6 +172,7 @@ function AppInner() {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/p/:slug" element={<PassportPublic />} />
+        <Route path="/feedback/public" element={<PublicSurvey />} />
         <Route
           element={
             <>
@@ -210,7 +211,6 @@ function AppInner() {
           {/* ---------- FEEDBACK ---------- */}
           <Route path="/feedback" element={<FeedBack />} />
           <Route path="/feedback/builder" element={<SurveyBuilder />} />
-          <Route path="/feedback/public" element={<PublicSurvey />} />
           <Route path="/feedback/results" element={<SurveyResults />} />
 
           {/* ---------- TASKS ---------- */}
