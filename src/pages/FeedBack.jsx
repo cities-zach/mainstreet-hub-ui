@@ -17,6 +17,7 @@ import {
   Plus,
   ClipboardList,
   BarChart3,
+  Copy,
   Trash2,
   AlertTriangle
 } from "lucide-react";
@@ -49,6 +50,19 @@ export default function Feedback() {
     },
     onError: () => {
       toast.error("Failed to delete survey");
+    }
+  });
+
+  const cloneMutation = useMutation({
+    mutationFn: (id) =>
+      apiFetch(`/surveys/${id}/clone`, { method: "POST" }),
+    onSuccess: (survey) => {
+      queryClient.invalidateQueries({ queryKey: ["surveys"] });
+      toast.success("Survey cloned as a new draft");
+      navigate(`/feedback/builder?id=${survey.id}`);
+    },
+    onError: () => {
+      toast.error("Failed to clone survey");
     }
   });
 
@@ -178,7 +192,7 @@ export default function Feedback() {
                   </div>
                 </CardContent>
 
-                <div className="px-6 pb-6 flex gap-2">
+                <div className="px-6 pb-6 flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -204,14 +218,26 @@ export default function Feedback() {
                     Results
                   </Button>
 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => cloneMutation.mutate(survey.id)}
+                    disabled={cloneMutation.isPending}
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    Clone
+                  </Button>
+
                   {isAdmin && (
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
                       onClick={() => setSurveyToDelete(survey)}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Delete
                     </Button>
                   )}
                 </div>
