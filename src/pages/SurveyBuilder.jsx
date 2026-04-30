@@ -78,7 +78,7 @@ export default function SurveyBuilder() {
     );
 
     setQuestions(ordered);
-  }, [surveyId]);
+  }, [existingQuestions, surveyId]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {

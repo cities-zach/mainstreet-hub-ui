@@ -69,7 +69,8 @@ export default function Feedback() {
   const isAdmin =
     user?.app_role === "admin" ||
     user?.app_role === "super_admin" ||
-    user?.role === "admin";
+    user?.role === "admin" ||
+    user?.role === "super_admin";
 
   const statusColors = {
     draft: "bg-slate-100 text-slate-700 border-slate-200",
