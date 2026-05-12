@@ -31,6 +31,7 @@ import TaskMaster from "@/pages/TaskMaster";
 
 /* ---------- CRM / INVESTORS ---------- */
 import CRM from "@/pages/CRM";
+import Outreach from "@/pages/Outreach";
 import InvestorTrack from "@/pages/InvestorTrack";
 import RAGTime from "@/pages/RAGTime";
 
@@ -228,6 +229,7 @@ function AppInner() {
           <Route path="/crm/imports" element={<CRM />} />
           <Route path="/crm/audiences" element={<CRM />} />
           <Route path="/crm/touchpoints" element={<CRM />} />
+          <Route path="/outreach" element={<Outreach />} />
           <Route path="/investors" element={<InvestorTrack />} />
 
           {/* ---------- RAGTIME ---------- */}
