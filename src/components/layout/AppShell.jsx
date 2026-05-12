@@ -19,6 +19,7 @@ import {
   MapPin,
   MessageSquare,
   Camera,
+  Network,
 } from "lucide-react";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export default function AppShell({ me }) {
     { label: "SupplyStop", to: "/supplystop", icon: Package },
     { label: "TeamBuilder", to: "/teambuilder", icon: Users },
     { label: "FeedBack", to: "/feedback", icon: ClipboardList },
+    { label: "Relationship Manager", to: "/crm", icon: Network },
     { label: "InvestorTrack", to: "/investors", icon: LineChart },
     { label: "Chat", to: "/chat", icon: MessageSquare },
     { label: "Passport", to: "/passports", icon: MapPin },

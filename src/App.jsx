@@ -30,6 +30,7 @@ import SurveyResults from "@/pages/SurveyResults";
 import TaskMaster from "@/pages/TaskMaster";
 
 /* ---------- CRM / INVESTORS ---------- */
+import CRM from "@/pages/CRM";
 import InvestorTrack from "@/pages/InvestorTrack";
 import RAGTime from "@/pages/RAGTime";
 
@@ -220,6 +221,13 @@ function AppInner() {
           <Route path="/chat" element={<Chat />} />
 
           {/* ---------- INVESTORS ---------- */}
+          <Route path="/crm" element={<CRM />} />
+          <Route path="/crm/contacts/:contactId" element={<CRM />} />
+          <Route path="/crm/entities/:entityId" element={<CRM />} />
+          <Route path="/crm/places/:placeId" element={<CRM />} />
+          <Route path="/crm/imports" element={<CRM />} />
+          <Route path="/crm/audiences" element={<CRM />} />
+          <Route path="/crm/touchpoints" element={<CRM />} />
           <Route path="/investors" element={<InvestorTrack />} />
 
           {/* ---------- RAGTIME ---------- */}
