@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Tags,
+  Trash2,
   Upload,
   Users,
 } from "lucide-react";
@@ -368,6 +369,349 @@ function TouchpointComposer({ defaults = {}, onSaved }) {
         <Button disabled={mutation.isPending} onClick={() => mutation.mutate(form)}>
           Save Touchpoint
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function getRelationshipTargets(type) {
+  if (type === "contact") {
+    return [
+      {
+        id: "entity",
+        label: "Business / organization",
+        searchPath: "/crm/entities",
+        postPath: "/crm/contact-entity-relationships",
+        endpoint: "contact-entity-relationships",
+        idField: "entity_id",
+        defaultRelationship: "owner",
+        defaultRole: "",
+        placeholder: "Search businesses",
+      },
+      {
+        id: "place",
+        label: "Place / property",
+        searchPath: "/crm/places",
+        postPath: "/crm/place-contact-relationships",
+        endpoint: "place-contact-relationships",
+        idField: "place_id",
+        defaultRelationship: "property contact",
+        defaultRole: "",
+        placeholder: "Search places",
+      },
+    ];
+  }
+  if (type === "entity") {
+    return [
+      {
+        id: "contact",
+        label: "Person",
+        searchPath: "/crm/contacts",
+        postPath: "/crm/contact-entity-relationships",
+        endpoint: "contact-entity-relationships",
+        idField: "contact_id",
+        defaultRelationship: "contact",
+        defaultRole: "",
+        placeholder: "Search people",
+      },
+      {
+        id: "place",
+        label: "Place / property",
+        searchPath: "/crm/places",
+        postPath: "/crm/place-entity-relationships",
+        endpoint: "place-entity-relationships",
+        idField: "place_id",
+        defaultRelationship: "occupant",
+        defaultRole: "",
+        placeholder: "Search places",
+      },
+    ];
+  }
+  return [
+    {
+      id: "entity",
+      label: "Business / organization",
+      searchPath: "/crm/entities",
+      postPath: "/crm/place-entity-relationships",
+      endpoint: "place-entity-relationships",
+      idField: "entity_id",
+      defaultRelationship: "occupant",
+      defaultRole: "",
+      placeholder: "Search businesses",
+    },
+    {
+      id: "contact",
+      label: "Person",
+      searchPath: "/crm/contacts",
+      postPath: "/crm/place-contact-relationships",
+      endpoint: "place-contact-relationships",
+      idField: "contact_id",
+      defaultRelationship: "property contact",
+      defaultRole: "",
+      placeholder: "Search people",
+    },
+  ];
+}
+
+function getRecordLabel(record) {
+  return record?.display_name || record?.name || record?.place_name || record?.line1 || "Unnamed record";
+}
+
+function getRecordSubLabel(record) {
+  return [
+    record?.primary_email,
+    record?.general_email,
+    record?.entity_type,
+    record?.category,
+    record?.line1,
+    record?.city,
+    record?.state,
+    record?.occupancy_status,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function RelationshipEditor({ type, recordId }) {
+  const queryClient = useQueryClient();
+  const targets = getRelationshipTargets(type);
+  const [targetType, setTargetType] = useState(targets[0].id);
+  const target = targets.find((item) => item.id === targetType) || targets[0];
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState({
+    relationship_type: target.defaultRelationship,
+    role_title: target.defaultRole,
+    notes: "",
+  });
+
+  const search = useQuery({
+    queryKey: ["crm", "relationship-search", target.searchPath, query],
+    queryFn: () => apiFetch(`${target.searchPath}?query=${encodeURIComponent(query)}`),
+  });
+
+  const createRelationship = useMutation({
+    mutationFn: () => {
+      if (!selected?.id) throw new Error(`Select a ${target.label.toLowerCase()} first`);
+      const payload = {
+        relationship_type: form.relationship_type || target.defaultRelationship,
+        notes: form.notes || null,
+        [target.idField]: selected.id,
+      };
+      if (type === "contact" || target.id === "contact") payload.contact_id = type === "contact" ? recordId : selected.id;
+      if (type === "entity" || target.id === "entity") payload.entity_id = type === "entity" ? recordId : selected.id;
+      if (type === "place" || target.id === "place") payload.place_id = type === "place" ? recordId : selected.id;
+      if (target.endpoint === "contact-entity-relationships") {
+        payload.role_title = form.role_title || null;
+        payload.is_primary_contact = Boolean(form.is_primary_contact);
+      }
+      if (target.endpoint === "place-entity-relationships") {
+        payload.is_primary_location = Boolean(form.is_primary_location);
+      }
+      return apiFetch(target.postPath, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", type, recordId] });
+      queryClient.invalidateQueries({ queryKey: ["crm"] });
+      toast.success("Relationship added");
+      setSelected(null);
+      setQuery("");
+      setForm({
+        relationship_type: target.defaultRelationship,
+        role_title: target.defaultRole,
+        notes: "",
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleTargetChange = (nextType) => {
+    const nextTarget = targets.find((item) => item.id === nextType) || targets[0];
+    setTargetType(nextType);
+    setSelected(null);
+    setQuery("");
+    setForm({
+      relationship_type: nextTarget.defaultRelationship,
+      role_title: nextTarget.defaultRole,
+      notes: "",
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Plus className="w-5 h-5" />
+          Add Relationship
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div>
+          <Label>Connect to</Label>
+          <select
+            className="w-full border rounded-md h-10 px-3 bg-white dark:bg-slate-950"
+            value={targetType}
+            onChange={(event) => handleTargetChange(event.target.value)}
+          >
+            {targets.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <SearchBox value={query} onChange={setQuery} placeholder={target.placeholder} />
+        <div className="max-h-44 overflow-auto border rounded-xl divide-y">
+          {(search.data?.rows || []).map((record) => (
+            <button
+              key={record.id}
+              type="button"
+              className={`w-full text-left p-2 hover:bg-slate-50 dark:hover:bg-slate-900 ${
+                selected?.id === record.id ? "bg-[#835879]/10" : ""
+              }`}
+              onClick={() => setSelected(record)}
+            >
+              <p className="text-sm font-medium">{getRecordLabel(record)}</p>
+              <p className="text-xs text-slate-500">{getRecordSubLabel(record) || "No summary details"}</p>
+            </button>
+          ))}
+          {!search.isLoading && !(search.data?.rows || []).length ? (
+            <p className="p-3 text-sm text-slate-500">No matching records.</p>
+          ) : null}
+        </div>
+        <div>
+          <Label>Relationship type</Label>
+          <Input
+            value={form.relationship_type}
+            onChange={(event) => setForm((prev) => ({ ...prev, relationship_type: event.target.value }))}
+            placeholder="owner, manager, occupant, property contact"
+          />
+        </div>
+        {target.endpoint === "contact-entity-relationships" ? (
+          <div>
+            <Label>Role / title</Label>
+            <Input
+              value={form.role_title}
+              onChange={(event) => setForm((prev) => ({ ...prev, role_title: event.target.value }))}
+              placeholder="Executive Director, Store Manager, Board Chair"
+            />
+          </div>
+        ) : null}
+        <div>
+          <Label>Notes</Label>
+          <Textarea value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} />
+        </div>
+        {selected ? (
+          <p className="text-sm text-slate-500">
+            Selected: <span className="font-medium text-slate-700 dark:text-slate-200">{getRecordLabel(selected)}</span>
+          </p>
+        ) : null}
+        <Button className="w-full bg-[#835879] text-white" disabled={createRelationship.isPending} onClick={() => createRelationship.mutate()}>
+          Link Record
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RelationshipRow({ item, label, subLabel, endpoint, onRemove }) {
+  return (
+    <div className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <p className="font-medium">{label}</p>
+        <p className="text-sm text-slate-500">
+          {[item.relationship_type, item.role_title, subLabel].filter(Boolean).join(" · ")}
+        </p>
+        {item.notes ? <p className="text-sm mt-1 whitespace-pre-wrap">{item.notes}</p> : null}
+      </div>
+      <Button variant="outline" size="sm" className="w-fit text-red-600" onClick={() => onRemove({ id: item.id, endpoint })}>
+        <Trash2 className="w-4 h-4 mr-2" />
+        Remove
+      </Button>
+    </div>
+  );
+}
+
+function RelatedRecordsCard({ type, detail }) {
+  const queryClient = useQueryClient();
+  const removeRelationship = useMutation({
+    mutationFn: ({ id, endpoint }) => apiFetch(`/crm/${endpoint}/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", type, detail.id] });
+      queryClient.invalidateQueries({ queryKey: ["crm"] });
+      toast.success("Relationship removed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const rows = [];
+  if (type === "contact") {
+    rows.push(
+      ...(detail.relationships || []).map((item) => ({
+        item,
+        label: item.entity_name,
+        subLabel: item.entity_type,
+        endpoint: "contact-entity-relationships",
+      })),
+      ...(detail.places || []).map((item) => ({
+        item,
+        label: item.place_name || item.line1,
+        subLabel: [item.line1, item.city, item.state].filter(Boolean).join(", "),
+        endpoint: "place-contact-relationships",
+      }))
+    );
+  } else if (type === "entity") {
+    rows.push(
+      ...(detail.people || []).map((item) => ({
+        item,
+        label: item.display_name,
+        subLabel: [item.first_name, item.last_name].filter(Boolean).join(" "),
+        endpoint: "contact-entity-relationships",
+      })),
+      ...(detail.places || []).map((item) => ({
+        item,
+        label: item.place_name || item.line1,
+        subLabel: [item.line1, item.city, item.state].filter(Boolean).join(", "),
+        endpoint: "place-entity-relationships",
+      }))
+    );
+  } else {
+    rows.push(
+      ...(detail.entities || []).map((item) => ({
+        item,
+        label: item.name,
+        subLabel: item.entity_type,
+        endpoint: "place-entity-relationships",
+      })),
+      ...(detail.contacts || []).map((item) => ({
+        item,
+        label: item.display_name,
+        subLabel: null,
+        endpoint: "place-contact-relationships",
+      }))
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Related Records</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {rows.map((row) => (
+          <RelationshipRow
+            key={`${row.endpoint}-${row.item.id}`}
+            item={row.item}
+            label={row.label || "Related record"}
+            subLabel={row.subLabel}
+            endpoint={row.endpoint}
+            onRemove={(payload) => removeRelationship.mutate(payload)}
+          />
+        ))}
+        {!rows.length ? <p className="text-sm text-slate-500">No relationships yet. Use Add Relationship to connect this profile.</p> : null}
       </CardContent>
     </Card>
   );
@@ -834,25 +1178,7 @@ function ProfileShell({ type, id }) {
                 {detail.data.notes ? <p className="pt-2 whitespace-pre-wrap">{detail.data.notes}</p> : null}
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Related Records</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {(detail.data.relationships || detail.data.people || detail.data.entities || []).map((item) => (
-                  <div key={item.id} className="border rounded-lg p-3">
-                    <p className="font-medium">{item.entity_name || item.display_name || item.name || item.relationship_type}</p>
-                    <p className="text-sm text-slate-500">{[item.relationship_type, item.role_title].filter(Boolean).join(" · ")}</p>
-                  </div>
-                ))}
-                {(detail.data.places || []).map((item) => (
-                  <div key={item.id} className="border rounded-lg p-3">
-                    <p className="font-medium">{item.place_name || item.line1}</p>
-                    <p className="text-sm text-slate-500">{item.relationship_type}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <RelatedRecordsCard type={type} detail={detail.data} />
             <Card>
               <CardHeader>
                 <CardTitle>Timeline</CardTitle>
@@ -869,6 +1195,7 @@ function ProfileShell({ type, id }) {
             </Card>
           </div>
           <div className="space-y-6">
+            <RelationshipEditor type={type} recordId={id} />
             <TouchpointComposer defaults={touchpointDefaults} />
             <Card>
               <CardHeader>
