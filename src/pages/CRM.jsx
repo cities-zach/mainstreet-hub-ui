@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
   Activity,
+  AlertCircle,
   Building2,
+  Clock,
   CopyCheck,
   Download,
   FileSpreadsheet,
@@ -25,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import PassportMap from "@/components/passport/PassportMap";
 
 const emptyContact = {
   first_name: "",
@@ -59,6 +62,21 @@ const emptyPlace = {
   notes: "",
   source: "manual",
 };
+
+const starterTags = {
+  contact: ["donor", "sponsor", "volunteer", "media", "board member"],
+  entity: ["sponsor", "restaurant", "retail", "nonprofit", "government", "vendor"],
+  place: ["property owner", "vacant property", "restaurant space", "upper floor", "needs follow-up"],
+};
+
+const touchpointTemplates = [
+  { label: "Phone call", touchpoint_type: "phone_call", subject: "Phone call" },
+  { label: "Email", touchpoint_type: "email", subject: "Email follow-up" },
+  { label: "Site visit", touchpoint_type: "site_visit", subject: "Site visit" },
+  { label: "Canvassing note", touchpoint_type: "canvassing", subject: "Canvassing note" },
+  { label: "Sponsorship ask", touchpoint_type: "sponsorship_ask", subject: "Sponsorship ask", follow_up_status: "needed" },
+  { label: "Volunteer follow-up", touchpoint_type: "volunteer_follow_up", subject: "Volunteer follow-up", follow_up_status: "needed" },
+];
 
 function StatCard({ icon, label, value }) {
   return (
@@ -115,6 +133,265 @@ function SearchBox({ value, onChange, placeholder }) {
         className="pl-9"
       />
     </div>
+  );
+}
+
+function TagFilter({ type, value, onChange }) {
+  const tags = useQuery({
+    queryKey: ["crm", "tags", type],
+    queryFn: () => apiFetch(`/crm/tags?type=${type}`),
+  });
+  return (
+    <select
+      className="w-full md:w-56 border rounded-md h-10 px-3 bg-white dark:bg-slate-950"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">All tags</option>
+      {(tags.data || []).map((tag) => (
+        <option key={tag.id} value={tag.name}>
+          {tag.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function audienceTagType(targetType) {
+  if (targetType === "entities") return "entity";
+  if (targetType === "places") return "place";
+  return "contact";
+}
+
+function formatCrmDate(value) {
+  if (!value) return "No date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No date";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function CrmWidget({ title, icon, children, emptyText }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          {React.createElement(icon, { className: "w-4 h-4 text-[#835879]" })}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {children || <p className="text-sm text-slate-500">{emptyText}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CrmRecordLink({ to, title, subtitle, meta }) {
+  const content = (
+    <div className="rounded-xl border p-3 bg-white hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title || "Untitled"}</p>
+          {subtitle ? <p className="text-xs text-slate-500 mt-1">{subtitle}</p> : null}
+        </div>
+        {meta ? <Badge variant="outline" className="shrink-0">{meta}</Badge> : null}
+      </div>
+    </div>
+  );
+  return to ? <Link to={to}>{content}</Link> : content;
+}
+
+function CrmDashboardWidgets({ data }) {
+  const followUps = data?.follow_ups || [];
+  const staleContacts = data?.stale_contacts || [];
+  const staleEntities = data?.stale_entities || [];
+  const vacantPlaces = data?.vacant_places || [];
+  const recentActivity = data?.recent_activity || [];
+  const staleRecords = [
+    ...staleContacts.map((record) => ({
+      id: record.id,
+      type: "contact",
+      title: record.display_name,
+      subtitle: record.primary_email || "No recent touchpoint",
+      last_touchpoint_at: record.last_touchpoint_at,
+    })),
+    ...staleEntities.map((record) => ({
+      id: record.id,
+      type: "entity",
+      title: record.name,
+      subtitle: [record.entity_type, record.category].filter(Boolean).join(" · ") || "No recent touchpoint",
+      last_touchpoint_at: record.last_touchpoint_at,
+    })),
+  ].slice(0, 10);
+
+  return (
+    <div className="grid xl:grid-cols-4 md:grid-cols-2 gap-4">
+      <CrmWidget title="Follow-Ups Due" icon={Clock} emptyText="No upcoming or overdue follow-ups.">
+        {followUps.length
+          ? followUps.map((item) => {
+              const targetTitle = item.contact_name || item.entity_name || item.place_name || item.place_address;
+              const targetPath = item.related_contact_id
+                ? `/crm/contacts/${item.related_contact_id}`
+                : item.related_entity_id
+                  ? `/crm/entities/${item.related_entity_id}`
+                  : item.related_place_id
+                    ? `/crm/places/${item.related_place_id}`
+                    : null;
+              return (
+                <CrmRecordLink
+                  key={item.id}
+                  to={targetPath}
+                  title={item.subject || targetTitle || item.touchpoint_type}
+                  subtitle={targetTitle}
+                  meta={formatCrmDate(item.follow_up_at)}
+                />
+              );
+            })
+          : null}
+      </CrmWidget>
+      <CrmWidget title="No Recent Contact" icon={AlertCircle} emptyText="Everyone has recent relationship activity.">
+        {staleRecords.length
+          ? staleRecords.map((record) => (
+              <CrmRecordLink
+                key={`${record.type}-${record.id}`}
+                to={record.type === "contact" ? `/crm/contacts/${record.id}` : `/crm/entities/${record.id}`}
+                title={record.title}
+                subtitle={record.subtitle}
+                meta={record.last_touchpoint_at ? formatCrmDate(record.last_touchpoint_at) : "Never"}
+              />
+            ))
+          : null}
+      </CrmWidget>
+      <CrmWidget title="Vacant Places" icon={MapPin} emptyText="No vacant or available places are flagged.">
+        {vacantPlaces.length
+          ? vacantPlaces.map((place) => (
+              <CrmRecordLink
+                key={place.id}
+                to={`/crm/places/${place.id}`}
+                title={place.place_name || place.line1 || "Unnamed place"}
+                subtitle={[place.line1, place.city, place.state, place.use_type].filter(Boolean).join(" · ")}
+                meta={place.occupancy_status || "Vacant"}
+              />
+            ))
+          : null}
+      </CrmWidget>
+      <CrmWidget title="Recent CRM Activity" icon={Activity} emptyText="No CRM activity yet.">
+        {recentActivity.length
+          ? recentActivity.map((item) => {
+              const targetTitle = item.contact_name || item.entity_name || item.place_name;
+              return (
+                <CrmRecordLink
+                  key={item.id}
+                  title={item.subject || item.touchpoint_type}
+                  subtitle={[targetTitle, item.body?.slice(0, 60)].filter(Boolean).join(" · ")}
+                  meta={formatCrmDate(item.occurred_at)}
+                />
+              );
+            })
+          : null}
+      </CrmWidget>
+    </div>
+  );
+}
+
+function CrmGettingStarted({ summary }) {
+  const hasRecords = Boolean(
+    Number(summary?.contacts || 0) ||
+      Number(summary?.entities || 0) ||
+      Number(summary?.places || 0)
+  );
+  if (hasRecords) return null;
+  return (
+    <Card className="border-[#835879]/20 bg-[#835879]/5">
+      <CardContent className="p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[#2d4650] dark:text-slate-100">
+              Start with the relationship map you already know
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+              Add a few people, businesses, and places, then connect them with roles and log the first touchpoints. The CRM gets useful fastest when place records and relationship history grow together.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-2 text-sm">
+            <div className="rounded-xl bg-white dark:bg-slate-950 border p-3">
+              <p className="font-medium">1. Add records</p>
+              <p className="text-slate-500">People, businesses, and places.</p>
+            </div>
+            <div className="rounded-xl bg-white dark:bg-slate-950 border p-3">
+              <p className="font-medium">2. Connect them</p>
+              <p className="text-slate-500">Owners, tenants, managers, contacts.</p>
+            </div>
+            <div className="rounded-xl bg-white dark:bg-slate-950 border p-3">
+              <p className="font-medium">3. Log activity</p>
+              <p className="text-slate-500">Calls, visits, asks, canvassing notes.</p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickTouchpointButtons({ onSelect }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {touchpointTemplates.map((template) => (
+        <Button key={template.touchpoint_type} type="button" size="sm" variant="outline" onClick={() => onSelect(template)}>
+          {template.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function QuickTouchpointPanel({ title = "Log Touchpoint", defaults, onCancel }) {
+  if (!defaults) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-600">{title}</p>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      <TouchpointComposer key={JSON.stringify(defaults)} defaults={defaults} onSaved={onCancel} />
+    </div>
+  );
+}
+
+function PlaceMapView({ places = [], onLogCanvassing }) {
+  const mappedPlaces = places
+    .filter((place) => Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)))
+    .map((place) => ({
+      ...place,
+      name: place.place_name || place.line1 || "Unnamed place",
+      address_text: [place.line1, place.city, place.state].filter(Boolean).join(", "),
+      lat: Number(place.lat),
+      lng: Number(place.lng),
+    }));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="w-5 h-5" />
+          Place Map / Canvassing
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <PassportMap
+          stops={mappedPlaces}
+          stamps={[]}
+          mapConfig={{}}
+          showControls
+          heightClass="h-[360px]"
+          onSelectStop={(place) => onLogCanvassing?.(place)}
+        />
+        <p className="text-sm text-slate-500">
+          Click a mapped place to start a canvassing note. Places need latitude and longitude to appear on the map.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -717,12 +994,163 @@ function RelatedRecordsCard({ type, detail }) {
   );
 }
 
+function TagManager({ type, recordId, tags = [] }) {
+  const queryClient = useQueryClient();
+  const [newTagName, setNewTagName] = useState("");
+  const [selectedTagId, setSelectedTagId] = useState("");
+  const tagList = useQuery({
+    queryKey: ["crm", "tags", type],
+    queryFn: () => apiFetch(`/crm/tags?type=${type}`),
+  });
+  const assignedIds = new Set(tags.map((tag) => tag.id));
+  const availableTags = (tagList.data || []).filter((tag) => !assignedIds.has(tag.id));
+
+  const assignTag = useMutation({
+    mutationFn: (tagId) =>
+      apiFetch("/crm/taggings", {
+        method: "POST",
+        body: JSON.stringify({
+          tag_id: tagId,
+          entity_type: type,
+          entity_id: recordId,
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", type, recordId] });
+      queryClient.invalidateQueries({ queryKey: ["crm", "tags", type] });
+      toast.success("Tag added");
+      setSelectedTagId("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const createTag = useMutation({
+    mutationFn: async (name) => {
+      const tag = await apiFetch("/crm/tags", {
+        method: "POST",
+        body: JSON.stringify({ name, tag_type: type }),
+      });
+      await apiFetch("/crm/taggings", {
+        method: "POST",
+        body: JSON.stringify({
+          tag_id: tag.id,
+          entity_type: type,
+          entity_id: recordId,
+        }),
+      });
+      return tag;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", type, recordId] });
+      queryClient.invalidateQueries({ queryKey: ["crm", "tags", type] });
+      toast.success("Tag created");
+      setNewTagName("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const createStarterTags = useMutation({
+    mutationFn: async () => {
+      const names = starterTags[type] || [];
+      const existingNames = new Set((tagList.data || []).map((tag) => tag.name.toLowerCase()));
+      const missing = names.filter((name) => !existingNames.has(name.toLowerCase()));
+      for (const name of missing) {
+        await apiFetch("/crm/tags", {
+          method: "POST",
+          body: JSON.stringify({ name, tag_type: type }),
+        });
+      }
+      return missing.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["crm", "tags", type] });
+      toast.success(count ? "Starter tags created" : "Starter tags already exist");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const removeTag = useMutation({
+    mutationFn: (taggingId) => apiFetch(`/crm/taggings/${taggingId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", type, recordId] });
+      toast.success("Tag removed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Tags className="w-5 h-5" />
+          Tags
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <button
+              key={tag.tagging_id || tag.id}
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm bg-white hover:bg-red-50 hover:text-red-700 dark:bg-slate-950"
+              onClick={() => tag.tagging_id && removeTag.mutate(tag.tagging_id)}
+              title="Remove tag"
+            >
+              {tag.name}
+              <Trash2 className="w-3 h-3" />
+            </button>
+          ))}
+          {!tags.length ? <p className="text-sm text-slate-500">No tags yet.</p> : null}
+        </div>
+        <div className="space-y-2">
+          <Label>Add existing tag</Label>
+          <div className="flex gap-2">
+            <select
+              className="flex-1 border rounded-md h-10 px-3 bg-white dark:bg-slate-950"
+              value={selectedTagId}
+              onChange={(event) => setSelectedTagId(event.target.value)}
+            >
+              <option value="">Choose a tag</option>
+              {availableTags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+            <Button variant="outline" disabled={!selectedTagId || assignTag.isPending} onClick={() => assignTag.mutate(selectedTagId)}>
+              Add
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Create tag</Label>
+          <div className="flex gap-2">
+            <Input value={newTagName} onChange={(event) => setNewTagName(event.target.value)} placeholder="donor, restaurant, vacant property" />
+            <Button
+              variant="outline"
+              disabled={!newTagName.trim() || createTag.isPending}
+              onClick={() => createTag.mutate(newTagName.trim())}
+            >
+              Create
+            </Button>
+          </div>
+        </div>
+        <Button variant="outline" className="w-full" disabled={createStarterTags.isPending} onClick={() => createStarterTags.mutate()}>
+          Create Starter Tags
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ContactsSection() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+  const [quickTouchpoint, setQuickTouchpoint] = useState(null);
   const contacts = useQuery({
-    queryKey: ["crm", "contacts", query],
-    queryFn: () => apiFetch(`/crm/contacts?query=${encodeURIComponent(query)}`),
+    queryKey: ["crm", "contacts", query, tag],
+    queryFn: () => apiFetch(`/crm/contacts?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}`),
   });
   const createContact = useMutation({
     mutationFn: (payload) =>
@@ -740,18 +1168,41 @@ function ContactsSection() {
           <CardTitle>People</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <SearchBox value={query} onChange={setQuery} placeholder="Search by name or email" />
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <SearchBox value={query} onChange={setQuery} placeholder="Search by name or email" />
+            </div>
+            <TagFilter type="contact" value={tag} onChange={setTag} />
+          </div>
           <div className="divide-y">
             {(contacts.data?.rows || []).map((contact) => (
-              <Link key={contact.id} to={`/crm/contacts/${contact.id}`} className="block py-3 hover:bg-slate-50 rounded-lg px-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{contact.display_name}</p>
-                    <p className="text-sm text-slate-500">{contact.primary_email || contact.primary_phone || "No contact method yet"}</p>
+              <div key={contact.id} className="py-3 hover:bg-slate-50 rounded-lg px-2">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <Link to={`/crm/contacts/${contact.id}`} className="flex-1">
+                    <div>
+                      <p className="font-medium">{contact.display_name}</p>
+                      <p className="text-sm text-slate-500">{contact.primary_email || contact.primary_phone || "No contact method yet"}</p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setQuickTouchpoint({
+                          related_contact_id: contact.id,
+                          subject: `Touchpoint with ${contact.display_name}`,
+                          touchpoint_type: "note",
+                        })
+                      }
+                    >
+                      Log Touchpoint
+                    </Button>
+                    <Badge variant="outline">{contact.status}</Badge>
                   </div>
-                  <Badge variant="outline">{contact.status}</Badge>
                 </div>
-              </Link>
+              </div>
             ))}
             {!contacts.isLoading && !(contacts.data?.rows || []).length ? (
               <p className="text-sm text-slate-500 py-8 text-center">No contacts found.</p>
@@ -759,7 +1210,10 @@ function ContactsSection() {
           </div>
         </CardContent>
       </Card>
-      <ContactForm onSubmit={(payload) => createContact.mutate(payload)} isSaving={createContact.isPending} />
+      <div className="space-y-6">
+        <QuickTouchpointPanel defaults={quickTouchpoint} onCancel={() => setQuickTouchpoint(null)} />
+        <ContactForm onSubmit={(payload) => createContact.mutate(payload)} isSaving={createContact.isPending} />
+      </div>
     </div>
   );
 }
@@ -767,9 +1221,11 @@ function ContactsSection() {
 function EntitiesSection() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+  const [quickTouchpoint, setQuickTouchpoint] = useState(null);
   const entities = useQuery({
-    queryKey: ["crm", "entities", query],
-    queryFn: () => apiFetch(`/crm/entities?query=${encodeURIComponent(query)}`),
+    queryKey: ["crm", "entities", query, tag],
+    queryFn: () => apiFetch(`/crm/entities?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}`),
   });
   const createEntity = useMutation({
     mutationFn: (payload) =>
@@ -787,18 +1243,39 @@ function EntitiesSection() {
           <CardTitle>Businesses and Organizations</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <SearchBox value={query} onChange={setQuery} placeholder="Search by name, category, or email" />
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <SearchBox value={query} onChange={setQuery} placeholder="Search by name, category, or email" />
+            </div>
+            <TagFilter type="entity" value={tag} onChange={setTag} />
+          </div>
           <div className="divide-y">
             {(entities.data?.rows || []).map((entity) => (
-              <Link key={entity.id} to={`/crm/entities/${entity.id}`} className="block py-3 hover:bg-slate-50 rounded-lg px-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+              <div key={entity.id} className="py-3 hover:bg-slate-50 rounded-lg px-2">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <Link to={`/crm/entities/${entity.id}`} className="flex-1">
                     <p className="font-medium">{entity.name}</p>
                     <p className="text-sm text-slate-500">{[entity.entity_type, entity.category, entity.general_email].filter(Boolean).join(" · ")}</p>
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setQuickTouchpoint({
+                          related_entity_id: entity.id,
+                          subject: `Touchpoint with ${entity.name}`,
+                          touchpoint_type: "note",
+                        })
+                      }
+                    >
+                      Log Touchpoint
+                    </Button>
+                    <Badge variant="outline">{entity.status}</Badge>
                   </div>
-                  <Badge variant="outline">{entity.status}</Badge>
                 </div>
-              </Link>
+              </div>
             ))}
             {!entities.isLoading && !(entities.data?.rows || []).length ? (
               <p className="text-sm text-slate-500 py-8 text-center">No businesses found.</p>
@@ -806,7 +1283,10 @@ function EntitiesSection() {
           </div>
         </CardContent>
       </Card>
-      <EntityForm onSubmit={(payload) => createEntity.mutate(payload)} isSaving={createEntity.isPending} />
+      <div className="space-y-6">
+        <QuickTouchpointPanel defaults={quickTouchpoint} onCancel={() => setQuickTouchpoint(null)} />
+        <EntityForm onSubmit={(payload) => createEntity.mutate(payload)} isSaving={createEntity.isPending} />
+      </div>
     </div>
   );
 }
@@ -814,9 +1294,11 @@ function EntitiesSection() {
 function PlacesSection() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+  const [quickTouchpoint, setQuickTouchpoint] = useState(null);
   const places = useQuery({
-    queryKey: ["crm", "places", query],
-    queryFn: () => apiFetch(`/crm/places?query=${encodeURIComponent(query)}`),
+    queryKey: ["crm", "places", query, tag],
+    queryFn: () => apiFetch(`/crm/places?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}`),
   });
   const createPlace = useMutation({
     mutationFn: (payload) =>
@@ -828,32 +1310,68 @@ function PlacesSection() {
     onError: (error) => toast.error(error.message),
   });
   return (
-    <div className="grid lg:grid-cols-[1fr_380px] gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Places and Properties</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SearchBox value={query} onChange={setQuery} placeholder="Search by place, address, or parcel ID" />
-          <div className="divide-y">
-            {(places.data?.rows || []).map((place) => (
-              <Link key={place.id} to={`/crm/places/${place.id}`} className="block py-3 hover:bg-slate-50 rounded-lg px-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+    <div className="space-y-6">
+      <PlaceMapView
+        places={places.data?.rows || []}
+        onLogCanvassing={(place) =>
+          setQuickTouchpoint({
+            related_place_id: place.id,
+            touchpoint_type: "canvassing",
+            subject: `Canvassing note: ${place.name || place.place_name || place.line1 || "Place"}`,
+          })
+        }
+      />
+      <div className="grid lg:grid-cols-[1fr_380px] gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Places and Properties</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="flex-1">
+                <SearchBox value={query} onChange={setQuery} placeholder="Search by place, address, or parcel ID" />
+              </div>
+              <TagFilter type="place" value={tag} onChange={setTag} />
+            </div>
+            <div className="divide-y">
+              {(places.data?.rows || []).map((place) => (
+                <div key={place.id} className="py-3 hover:bg-slate-50 rounded-lg px-2">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <Link to={`/crm/places/${place.id}`} className="flex-1">
                     <p className="font-medium">{place.place_name || place.line1 || "Unnamed place"}</p>
                     <p className="text-sm text-slate-500">{[place.line1, place.city, place.state, place.occupancy_status].filter(Boolean).join(" · ")}</p>
+                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setQuickTouchpoint({
+                            related_place_id: place.id,
+                            subject: `Canvassing note: ${place.place_name || place.line1 || "Place"}`,
+                            touchpoint_type: "canvassing",
+                          })
+                        }
+                      >
+                        Log Visit
+                      </Button>
+                      <Badge variant="outline">{place.use_type || "place"}</Badge>
+                    </div>
                   </div>
-                  <Badge variant="outline">{place.use_type || "place"}</Badge>
                 </div>
-              </Link>
-            ))}
-            {!places.isLoading && !(places.data?.rows || []).length ? (
-              <p className="text-sm text-slate-500 py-8 text-center">No places found.</p>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-      <PlaceForm onSubmit={(payload) => createPlace.mutate(payload)} isSaving={createPlace.isPending} />
+              ))}
+              {!places.isLoading && !(places.data?.rows || []).length ? (
+                <p className="text-sm text-slate-500 py-8 text-center">No places found.</p>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+        <div className="space-y-6">
+          <QuickTouchpointPanel defaults={quickTouchpoint} onCancel={() => setQuickTouchpoint(null)} />
+          <PlaceForm onSubmit={(payload) => createPlace.mutate(payload)} isSaving={createPlace.isPending} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1069,7 +1587,11 @@ function AudiencesSection() {
           </div>
           <div>
             <Label>Tag filter</Label>
-            <Input value={form.tag} onChange={(e) => setForm((p) => ({ ...p, tag: e.target.value }))} />
+            <TagFilter
+              type={audienceTagType(form.target_type)}
+              value={form.tag}
+              onChange={(tag) => setForm((p) => ({ ...p, tag }))}
+            />
           </div>
           <Button onClick={() => create.mutate()} disabled={create.isPending}>Save Audience</Button>
         </CardContent>
@@ -1119,9 +1641,14 @@ function AudiencesSection() {
 
 function ProfileShell({ type, id }) {
   const endpoint = type === "contact" ? `/crm/contacts/${id}` : type === "entity" ? `/crm/entities/${id}` : `/crm/places/${id}`;
+  const [profileTouchpoint, setProfileTouchpoint] = useState(null);
   const detail = useQuery({
     queryKey: ["crm", type, id],
     queryFn: () => apiFetch(endpoint),
+  });
+  const timeline = useQuery({
+    queryKey: ["crm", type, id, "timeline"],
+    queryFn: () => apiFetch(`/crm/${type === "contact" ? "contacts" : type === "entity" ? "entities" : "places"}/${id}/timeline`),
   });
   const title = detail.data?.display_name || detail.data?.name || detail.data?.place_name || detail.data?.line1 || "CRM Profile";
   const touchpointDefaults = {
@@ -1129,6 +1656,11 @@ function ProfileShell({ type, id }) {
     related_entity_id: type === "entity" ? id : undefined,
     related_place_id: type === "place" ? id : undefined,
   };
+  const applyTemplate = (template) =>
+    setProfileTouchpoint({
+      ...touchpointDefaults,
+      ...template,
+    });
   if (detail.isLoading) return <p className="p-8 text-slate-500">Loading profile…</p>;
   if (!detail.data) return <p className="p-8 text-slate-500">Profile not found.</p>;
   return (
@@ -1184,30 +1716,49 @@ function ProfileShell({ type, id }) {
                 <CardTitle>Timeline</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(detail.data.touchpoints || []).map((item) => (
+                {(timeline.data || detail.data.touchpoints || []).map((item) => (
                   <div key={item.id} className="border rounded-lg p-3">
-                    <p className="font-medium">{item.subject || item.touchpoint_type}</p>
-                    <p className="text-xs text-slate-500">{item.occurred_at ? new Date(item.occurred_at).toLocaleString() : ""}</p>
-                    {item.body ? <p className="text-sm mt-2 whitespace-pre-wrap">{item.body}</p> : null}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{item.title || item.subject || item.touchpoint_type}</p>
+                        <p className="text-xs text-slate-500">
+                          {item.happened_at || item.occurred_at ? new Date(item.happened_at || item.occurred_at).toLocaleString() : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{item.type || item.touchpoint_type}</Badge>
+                    </div>
+                    {item.description || item.body ? <p className="text-sm mt-2 whitespace-pre-wrap">{item.description || item.body}</p> : null}
                   </div>
                 ))}
+                {!(timeline.data || detail.data.touchpoints || []).length ? (
+                  <p className="text-sm text-slate-500">No timeline activity yet.</p>
+                ) : null}
               </CardContent>
             </Card>
           </div>
           <div className="space-y-6">
             <RelationshipEditor type={type} recordId={id} />
-            <TouchpointComposer defaults={touchpointDefaults} />
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Tags className="w-5 h-5" />
-                  Tags and Duplicate Signals
+                  <Activity className="w-5 h-5" />
+                  Quick Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <QuickTouchpointButtons onSelect={applyTemplate} />
+              </CardContent>
+            </Card>
+            <TouchpointComposer key={JSON.stringify(profileTouchpoint || touchpointDefaults)} defaults={profileTouchpoint || touchpointDefaults} />
+            <TagManager type={type} recordId={id} tags={detail.data.tags || []} />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GitMerge className="w-5 h-5" />
+                  Duplicate Signals
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {(detail.data.tags || []).map((tag) => (
-                  <Badge key={tag.id} variant="outline">{tag.name}</Badge>
-                ))}
                 {(detail.data.duplicate_candidates || []).length ? (
                   <p className="text-sm text-amber-700">Possible duplicate records need review.</p>
                 ) : (
@@ -1236,6 +1787,10 @@ export default function CRM() {
     queryKey: ["crm", "summary"],
     queryFn: () => apiFetch("/crm/summary"),
   });
+  const dashboard = useQuery({
+    queryKey: ["crm", "dashboard"],
+    queryFn: () => apiFetch("/crm/dashboard"),
+  });
 
   if (params.contactId) return <ProfileShell type="contact" id={params.contactId} />;
   if (params.entityId) return <ProfileShell type="entity" id={params.entityId} />;
@@ -1261,6 +1816,8 @@ export default function CRM() {
           <StatCard icon={MapPin} label="Places" value={summary.data?.places} />
           <StatCard icon={Activity} label="Touchpoints" value={summary.data?.touchpoints} />
         </div>
+        <CrmGettingStarted summary={summary.data} />
+        <CrmDashboardWidgets data={dashboard.data} />
         <SectionTabs active={active} setActive={setActive} />
         {active === "contacts" ? <ContactsSection /> : null}
         {active === "entities" ? <EntitiesSection /> : null}
