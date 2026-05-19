@@ -15,6 +15,7 @@ export default function InteractiveTourMap({
   mapConfig = {},
   mode = "public",
   selectedStopId,
+  pinsLocked = false,
   onAddStop,
   onMoveStop,
   onSelectStop,
@@ -50,7 +51,7 @@ export default function InteractiveTourMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || mode !== "builder" || !onAddStop) return undefined;
+    if (!map || pinsLocked || mode !== "builder" || !onAddStop) return undefined;
     const handleClick = (event) => {
       onAddStop({
         lat: event.lngLat.lat,
@@ -61,7 +62,7 @@ export default function InteractiveTourMap({
     return () => {
       map.off("click", handleClick);
     };
-  }, [mode, onAddStop]);
+  }, [mode, onAddStop, pinsLocked]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -77,7 +78,7 @@ export default function InteractiveTourMap({
       const isSelected = selectedStopId === stop.id;
       const marker = new mapboxgl.Marker({
         color: isSelected ? "#2d4650" : "#835879",
-        draggable: mode === "builder",
+        draggable: mode === "builder" && !pinsLocked,
       })
         .setLngLat([Number(stop.lng), Number(stop.lat)])
         .setPopup(
@@ -92,7 +93,7 @@ export default function InteractiveTourMap({
         onSelectStop?.(stop);
       });
 
-      if (mode === "builder" && onMoveStop) {
+      if (mode === "builder" && !pinsLocked && onMoveStop) {
         marker.on("dragend", () => {
           const next = marker.getLngLat();
           onMoveStop(stop, { lat: next.lat, lng: next.lng });
@@ -107,7 +108,7 @@ export default function InteractiveTourMap({
     if (hasBounds) {
       map.fitBounds(bounds, { padding: 70, maxZoom: 16 });
     }
-  }, [mappableStops, mode, onMoveStop, onSelectStop, selectedStopId]);
+  }, [mappableStops, mode, onMoveStop, onSelectStop, pinsLocked, selectedStopId]);
 
   const handleLocate = () => {
     if (!navigator.geolocation) {
@@ -146,7 +147,11 @@ export default function InteractiveTourMap({
       {showControls && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm text-slate-600 dark:text-slate-300">
-            {mode === "builder" ? "Click the map to drop a pin. Drag pins to adjust them." : "Walking tour map"}
+            {mode === "builder"
+              ? pinsLocked
+                ? "Pins are locked. Select pins to edit details, or unlock to add and move pins."
+                : "Click the map to drop a pin. Drag pins to adjust them."
+              : "Walking tour map"}
           </div>
           <Button type="button" variant="outline" size="sm" onClick={handleLocate}>
             Use my location

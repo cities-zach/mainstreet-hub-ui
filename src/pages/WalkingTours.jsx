@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Image, MapPin, Plus, Trash2, Upload } from "lucide-react";
+import { Copy, ExternalLink, Image, Lock, MapPin, Plus, Trash2, Unlock, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/api";
 import { uploadPublicFile } from "@/lib/uploads";
@@ -56,6 +56,7 @@ export default function WalkingTours() {
   const [tourForm, setTourForm] = useState(emptyTour);
   const [stopForm, setStopForm] = useState(emptyStop);
   const [editingStopId, setEditingStopId] = useState(null);
+  const [pinsLocked, setPinsLocked] = useState(false);
   const [uploading, setUploading] = useState({ banner: false, stop: false });
 
   const tours = useQuery({
@@ -518,13 +519,40 @@ export default function WalkingTours() {
             <div className="grid gap-6 xl:grid-cols-[1fr_390px]">
               <Card>
                 <CardHeader>
-                  <CardTitle>Map Builder</CardTitle>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <CardTitle>Map Builder</CardTitle>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {pinsLocked
+                          ? "Pins are locked. Stop details can still be edited from the form and list."
+                          : "Click the map to add pins and drag existing pins to move them."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setPinsLocked((current) => !current)}
+                    >
+                      {pinsLocked ? (
+                        <>
+                          <Unlock className="h-4 w-4" />
+                          Unlock pins
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-4 w-4" />
+                          Lock pins
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <InteractiveTourMap
                     mode="builder"
                     stops={stops}
                     selectedStopId={editingStopId}
+                    pinsLocked={pinsLocked}
                     mapConfig={tour.map_config || {}}
                     onAddStop={handleMapAdd}
                     onMoveStop={moveStopMarker}
