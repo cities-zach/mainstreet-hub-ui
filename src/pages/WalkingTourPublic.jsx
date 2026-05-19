@@ -13,6 +13,45 @@ function directionsUrl(stop) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${stop.lat},${stop.lng}`)}`;
 }
 
+function StopDetailsCard({ stop, className = "" }) {
+  if (!stop) return null;
+  return (
+    <Card className={className}>
+      <CardHeader>
+        <CardTitle>{stop.label}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {stop.photo_url ? (
+          <img src={stop.photo_url} alt="" className="max-h-80 w-full rounded-xl object-cover" />
+        ) : (
+          <div className="flex h-44 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-900">
+            <Image className="h-8 w-8" />
+          </div>
+        )}
+        {stop.address_text && (
+          <div className="flex gap-2 text-sm text-slate-500">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{stop.address_text}</span>
+          </div>
+        )}
+        {stop.description && (
+          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">
+            {stop.description}
+          </p>
+        )}
+        {directionsUrl(stop) && (
+          <Button asChild className="w-full bg-[#835879] text-white">
+            <a href={directionsUrl(stop)} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-4 w-4" />
+              Open directions
+            </a>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function WalkingTourPublic() {
   const { slug } = useParams();
   const [selectedStopId, setSelectedStopId] = useState(null);
@@ -25,7 +64,7 @@ export default function WalkingTourPublic() {
 
   const tour = tourQuery.data?.tour;
   const stops = useMemo(() => tourQuery.data?.stops || [], [tourQuery.data?.stops]);
-  const selectedStop = stops.find((stop) => stop.id === selectedStopId) || stops[0] || null;
+  const selectedStop = stops.find((stop) => stop.id === selectedStopId) || null;
 
   if (tourQuery.isLoading) {
     return (
@@ -85,64 +124,36 @@ export default function WalkingTourPublic() {
             </CardHeader>
             <CardContent className="space-y-2">
               {stops.map((stop, index) => (
-                <button
-                  key={stop.id}
-                  type="button"
-                  className={`w-full rounded-xl border p-3 text-left transition ${
-                    selectedStop?.id === stop.id ? "border-[#835879] bg-[#835879]/5" : "bg-white hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900"
-                  }`}
-                  onClick={() => setSelectedStopId(stop.id)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#835879]/10 text-sm font-semibold text-[#835879]">
-                      {index + 1}
+                <div key={stop.id} className="space-y-2">
+                  <button
+                    type="button"
+                    className={`w-full rounded-xl border p-3 text-left transition ${
+                      selectedStop?.id === stop.id ? "border-[#835879] bg-[#835879]/5" : "bg-white hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900"
+                    }`}
+                    onClick={() => setSelectedStopId(stop.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#835879]/10 text-sm font-semibold text-[#835879]">
+                        {index + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium">{stop.label}</p>
+                        <p className="truncate text-xs text-slate-500">{stop.address_text || "Tap for details"}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium">{stop.label}</p>
-                      <p className="truncate text-xs text-slate-500">{stop.address_text || "Tap for details"}</p>
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                  {selectedStop?.id === stop.id && (
+                    <StopDetailsCard stop={stop} className="lg:hidden" />
+                  )}
+                </div>
               ))}
             </CardContent>
           </Card>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+        <aside className="hidden space-y-4 lg:sticky lg:top-4 lg:block lg:self-start">
           {selectedStop ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>{selectedStop.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {selectedStop.photo_url ? (
-                  <img src={selectedStop.photo_url} alt="" className="max-h-80 w-full rounded-xl object-cover" />
-                ) : (
-                  <div className="flex h-44 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-900">
-                    <Image className="h-8 w-8" />
-                  </div>
-                )}
-                {selectedStop.address_text && (
-                  <div className="flex gap-2 text-sm text-slate-500">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{selectedStop.address_text}</span>
-                  </div>
-                )}
-                {selectedStop.description && (
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">
-                    {selectedStop.description}
-                  </p>
-                )}
-                {directionsUrl(selectedStop) && (
-                  <Button asChild className="w-full bg-[#835879] text-white">
-                    <a href={directionsUrl(selectedStop)} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4" />
-                      Open directions
-                    </a>
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+            <StopDetailsCard stop={selectedStop} />
           ) : (
             <Card>
               <CardContent className="p-6 text-sm text-slate-500">

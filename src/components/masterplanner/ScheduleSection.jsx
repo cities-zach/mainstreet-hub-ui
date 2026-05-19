@@ -315,6 +315,19 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
               No planning tasks added yet.
             </div>
           )}
+
+          {!readOnly && planningItems.length > 0 && (
+            <div className="flex justify-center pt-2">
+              <Button
+                onClick={addPlanningItem}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Task
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
