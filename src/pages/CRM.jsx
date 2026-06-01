@@ -13,6 +13,7 @@ import {
   Download,
   FileSpreadsheet,
   GitMerge,
+  Mail,
   MapPin,
   Network,
   Pencil,
@@ -40,8 +41,8 @@ const emptyContact = {
   first_name: "",
   last_name: "",
   preferred_name: "",
-  email: "",
-  phone: "",
+  emails: [{ value: "", label: "" }],
+  phones: [{ value: "", label: "" }],
   notes: "",
   source: "manual",
   tags: [],
@@ -579,6 +580,48 @@ function TagSelectField({ type = "contact", value = [], onChange }) {
   );
 }
 
+function MultiContactField({ label, items, onChange, type = "text", placeholder }) {
+  const list = items.length ? items : [{ value: "", label: "" }];
+  const update = (index, key, value) =>
+    onChange(list.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
+  const remove = (index) => {
+    const next = list.filter((_, i) => i !== index);
+    onChange(next.length ? next : [{ value: "", label: "" }]);
+  };
+  const add = () => onChange([...list, { value: "", label: "" }]);
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {list.map((item, index) => (
+        <div key={index} className="flex gap-2">
+          <Input
+            type={type}
+            className="flex-1"
+            value={item.value}
+            onChange={(e) => update(index, "value", e.target.value)}
+            placeholder={placeholder}
+          />
+          <Input
+            className="w-28"
+            value={item.label}
+            onChange={(e) => update(index, "label", e.target.value)}
+            placeholder="Label"
+          />
+          <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} title="Remove">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={add}>
+        <Plus className="w-4 h-4 mr-1" /> Add another
+      </Button>
+      {list.filter((item) => item.value.trim()).length > 1 ? (
+        <p className="text-xs text-slate-500">The first entry is saved as the primary.</p>
+      ) : null}
+    </div>
+  );
+}
+
 function ContactForm({ onSubmit, isSaving }) {
   const [form, setForm] = useState(emptyContact);
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
@@ -603,13 +646,23 @@ function ContactForm({ onSubmit, isSaving }) {
           <Label>Preferred name</Label>
           <Input value={form.preferred_name} onChange={(e) => setField("preferred_name", e.target.value)} />
         </div>
-        <div>
-          <Label>Email</Label>
-          <Input value={form.email} onChange={(e) => setField("email", e.target.value)} />
+        <div className="md:col-span-2">
+          <MultiContactField
+            label="Emails"
+            type="email"
+            placeholder="name@example.com"
+            items={form.emails}
+            onChange={(emails) => setField("emails", emails)}
+          />
         </div>
-        <div>
-          <Label>Phone</Label>
-          <Input value={form.phone} onChange={(e) => setField("phone", e.target.value)} />
+        <div className="md:col-span-2">
+          <MultiContactField
+            label="Phones"
+            type="tel"
+            placeholder="(555) 555-5555"
+            items={form.phones}
+            onChange={(phones) => setField("phones", phones)}
+          />
         </div>
         <div>
           <Label>Source</Label>
@@ -630,8 +683,20 @@ function ContactForm({ onSubmit, isSaving }) {
                 first_name: form.first_name,
                 last_name: form.last_name,
                 preferred_name: form.preferred_name,
-                emails: form.email ? [{ email: form.email, is_primary: true }] : [],
-                phones: form.phone ? [{ phone: form.phone, is_primary: true }] : [],
+                emails: form.emails
+                  .filter((item) => item.value.trim())
+                  .map((item, index) => ({
+                    email: item.value.trim(),
+                    label: item.label.trim() || null,
+                    is_primary: index === 0,
+                  })),
+                phones: form.phones
+                  .filter((item) => item.value.trim())
+                  .map((item, index) => ({
+                    phone: item.value.trim(),
+                    label: item.label.trim() || null,
+                    is_primary: index === 0,
+                  })),
                 notes: form.notes,
                 source: form.source,
                 tags: form.tags,
@@ -3018,6 +3083,178 @@ function ProfileTasksCard({ type, id }) {
   );
 }
 
+function ContactInfoManager({ contactId, emails = [], phones = [] }) {
+  const queryClient = useQueryClient();
+  const [newEmail, setNewEmail] = useState({ value: "", label: "" });
+  const [newPhone, setNewPhone] = useState({ value: "", label: "" });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["crm", "contact", contactId] });
+
+  const addEmail = useMutation({
+    mutationFn: () =>
+      apiFetch(`/crm/contacts/${contactId}/emails`, {
+        method: "POST",
+        body: JSON.stringify({
+          email: newEmail.value.trim(),
+          label: newEmail.label.trim() || null,
+          is_primary: emails.length === 0,
+        }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      setNewEmail({ value: "", label: "" });
+      toast.success("Email added");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const patchEmail = useMutation({
+    mutationFn: ({ id, body }) => apiFetch(`/crm/contact-emails/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: invalidate,
+    onError: (error) => toast.error(error.message),
+  });
+  const removeEmail = useMutation({
+    mutationFn: (id) => apiFetch(`/crm/contact-emails/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Email removed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const addPhone = useMutation({
+    mutationFn: () =>
+      apiFetch(`/crm/contacts/${contactId}/phones`, {
+        method: "POST",
+        body: JSON.stringify({
+          phone: newPhone.value.trim(),
+          label: newPhone.label.trim() || null,
+          is_primary: phones.length === 0,
+        }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      setNewPhone({ value: "", label: "" });
+      toast.success("Phone added");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const patchPhone = useMutation({
+    mutationFn: ({ id, body }) => apiFetch(`/crm/contact-phones/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: invalidate,
+    onError: (error) => toast.error(error.message),
+  });
+  const removePhone = useMutation({
+    mutationFn: (id) => apiFetch(`/crm/contact-phones/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Phone removed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="w-5 h-5" />
+          Contact Info
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Emails</p>
+          {emails.map((email) => (
+            <div key={email.id} className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
+              <button
+                type="button"
+                title={email.is_primary ? "Primary email" : "Set as primary"}
+                className={email.is_primary ? "text-[#835879]" : "text-slate-300 hover:text-slate-400"}
+                onClick={() => !email.is_primary && patchEmail.mutate({ id: email.id, body: { is_primary: true } })}
+              >
+                <Star className={`w-4 h-4 ${email.is_primary ? "fill-[#835879]" : ""}`} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate">{email.email}</p>
+                {email.label ? <p className="text-xs text-slate-500">{email.label}</p> : null}
+              </div>
+              <button
+                type="button"
+                title={email.is_verified ? "Verified" : "Mark verified"}
+                className={email.is_verified ? "text-emerald-600" : "text-slate-300 hover:text-slate-400"}
+                onClick={() => patchEmail.mutate({ id: email.id, body: { is_verified: !email.is_verified } })}
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <Button variant="ghost" size="sm" className="text-red-600" onClick={() => removeEmail.mutate(email.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+          {!emails.length ? <p className="text-sm text-slate-500">No emails yet.</p> : null}
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              className="flex-1"
+              value={newEmail.value}
+              onChange={(e) => setNewEmail((prev) => ({ ...prev, value: e.target.value }))}
+              placeholder="name@example.com"
+            />
+            <Input
+              className="w-24"
+              value={newEmail.label}
+              onChange={(e) => setNewEmail((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Label"
+            />
+            <Button variant="outline" disabled={!newEmail.value.trim() || addEmail.isPending} onClick={() => addEmail.mutate()}>
+              Add
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Phones</p>
+          {phones.map((phone) => (
+            <div key={phone.id} className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
+              <button
+                type="button"
+                title={phone.is_primary ? "Primary phone" : "Set as primary"}
+                className={phone.is_primary ? "text-[#835879]" : "text-slate-300 hover:text-slate-400"}
+                onClick={() => !phone.is_primary && patchPhone.mutate({ id: phone.id, body: { is_primary: true } })}
+              >
+                <Star className={`w-4 h-4 ${phone.is_primary ? "fill-[#835879]" : ""}`} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate">{phone.phone}</p>
+                {phone.label ? <p className="text-xs text-slate-500">{phone.label}</p> : null}
+              </div>
+              <Button variant="ghost" size="sm" className="text-red-600" onClick={() => removePhone.mutate(phone.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+          {!phones.length ? <p className="text-sm text-slate-500">No phones yet.</p> : null}
+          <div className="flex gap-2">
+            <Input
+              type="tel"
+              className="flex-1"
+              value={newPhone.value}
+              onChange={(e) => setNewPhone((prev) => ({ ...prev, value: e.target.value }))}
+              placeholder="(555) 555-5555"
+            />
+            <Input
+              className="w-24"
+              value={newPhone.label}
+              onChange={(e) => setNewPhone((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Label"
+            />
+            <Button variant="outline" disabled={!newPhone.value.trim() || addPhone.isPending} onClick={() => addPhone.mutate()}>
+              Add
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ProfileShell({ type, id }) {
   const endpoint = type === "contact" ? `/crm/contacts/${id}` : type === "entity" ? `/crm/entities/${id}` : `/crm/places/${id}`;
   const [profileTouchpoint, setProfileTouchpoint] = useState(null);
@@ -3090,6 +3327,13 @@ function ProfileShell({ type, id }) {
                 {detail.data.notes ? <p className="pt-2 whitespace-pre-wrap">{detail.data.notes}</p> : null}
               </CardContent>
             </Card>
+            {type === "contact" ? (
+              <ContactInfoManager
+                contactId={id}
+                emails={detail.data.emails || []}
+                phones={detail.data.phones || []}
+              />
+            ) : null}
             <RelatedRecordsCard type={type} detail={detail.data} />
             <RelationshipGraph type={type} id={id} />
             <ProfileTasksCard type={type} id={id} />
