@@ -216,8 +216,6 @@ function CrmRecordLink({ to, title, subtitle, meta }) {
 function CrmDashboardWidgets({ data }) {
   const queryClient = useQueryClient();
   const followUps = data?.follow_ups || [];
-  const staleContacts = data?.stale_contacts || [];
-  const staleEntities = data?.stale_entities || [];
   const vacantPlaces = data?.vacant_places || [];
   const recentActivity = data?.recent_activity || [];
   const openTasks = data?.open_tasks || [];
@@ -233,25 +231,9 @@ function CrmDashboardWidgets({ data }) {
     },
     onError: (error) => toast.error(error.message),
   });
-  const staleRecords = [
-    ...staleContacts.map((record) => ({
-      id: record.id,
-      type: "contact",
-      title: record.display_name,
-      subtitle: record.primary_email || "No recent touchpoint",
-      last_touchpoint_at: record.last_touchpoint_at,
-    })),
-    ...staleEntities.map((record) => ({
-      id: record.id,
-      type: "entity",
-      title: record.name,
-      subtitle: [record.entity_type, record.category].filter(Boolean).join(" · ") || "No recent touchpoint",
-      last_touchpoint_at: record.last_touchpoint_at,
-    })),
-  ].slice(0, 10);
 
   return (
-    <div className="grid xl:grid-cols-4 md:grid-cols-2 gap-4">
+    <div className="grid xl:grid-cols-3 md:grid-cols-2 gap-4">
       <CrmWidget title="Follow-Ups Due" icon={Clock} emptyText="No upcoming or overdue follow-ups.">
         {followUps.length
           ? followUps.map((item) => {
@@ -285,19 +267,6 @@ function CrmDashboardWidgets({ data }) {
                 </div>
               );
             })
-          : null}
-      </CrmWidget>
-      <CrmWidget title="No Recent Contact" icon={AlertCircle} emptyText="Everyone has recent relationship activity.">
-        {staleRecords.length
-          ? staleRecords.map((record) => (
-              <CrmRecordLink
-                key={`${record.type}-${record.id}`}
-                to={record.type === "contact" ? `/crm/contacts/${record.id}` : `/crm/entities/${record.id}`}
-                title={record.title}
-                subtitle={record.subtitle}
-                meta={record.last_touchpoint_at ? formatCrmDate(record.last_touchpoint_at) : "Never"}
-              />
-            ))
           : null}
       </CrmWidget>
       <CrmWidget title="Vacant Places" icon={MapPin} emptyText="No vacant or available places are flagged.">
