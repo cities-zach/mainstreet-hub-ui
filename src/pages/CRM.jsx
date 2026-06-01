@@ -7,6 +7,7 @@ import {
   AlertCircle,
   BarChart3,
   Building2,
+  Check,
   Clock,
   CopyCheck,
   Download,
@@ -14,12 +15,15 @@ import {
   GitMerge,
   MapPin,
   Network,
+  Pencil,
   Plus,
   Search,
+  Star,
   Tags,
   Trash2,
   Upload,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/api";
@@ -39,6 +43,7 @@ const emptyContact = {
   phone: "",
   notes: "",
   source: "manual",
+  tags: [],
 };
 
 const emptyEntity = {
@@ -104,6 +109,7 @@ function SectionTabs({ active, setActive }) {
     ["districts", "Districts", Network],
     ["touchpoints", "Activity", Activity],
     ["reports", "Reports", BarChart3],
+    ["tags", "Tags", Tags],
     ["imports", "Imports", Upload],
     ["duplicates", "Duplicates", GitMerge],
     ["audiences", "Audiences", CopyCheck],
@@ -476,6 +482,102 @@ function PlaceMapView({ places = [], onLogCanvassing, overlays = [] }) {
   );
 }
 
+function TagSelectField({ type = "contact", value = [], onChange }) {
+  const [draft, setDraft] = useState("");
+  const tagList = useQuery({
+    queryKey: ["crm", "tags", type],
+    queryFn: () => apiFetch(`/crm/tags?type=${type}`),
+  });
+  const selectedLower = new Set(value.map((name) => name.toLowerCase()));
+  const addTag = (raw) => {
+    const name = (raw || "").trim();
+    if (!name) return;
+    if (selectedLower.has(name.toLowerCase())) {
+      setDraft("");
+      return;
+    }
+    onChange([...value, name]);
+    setDraft("");
+  };
+  const removeTag = (name) => onChange(value.filter((tag) => tag !== name));
+  const suggestions = (tagList.data || []).filter((tag) => !selectedLower.has(tag.name.toLowerCase()));
+  const curated = suggestions.filter((tag) => tag.is_curated);
+  const others = suggestions.filter((tag) => !tag.is_curated);
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-2">
+        <Tags className="w-4 h-4" />
+        Tags
+      </Label>
+      {value.length ? (
+        <div className="flex flex-wrap gap-2">
+          {value.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm bg-white hover:bg-red-50 hover:text-red-700 dark:bg-slate-950"
+              onClick={() => removeTag(name)}
+              title="Remove tag"
+            >
+              {name}
+              <X className="w-3 h-3" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addTag(draft);
+            }
+          }}
+          placeholder="Type a tag and press Enter"
+        />
+        <Button type="button" variant="outline" disabled={!draft.trim()} onClick={() => addTag(draft)}>
+          Add
+        </Button>
+      </div>
+      {curated.length ? (
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Key tags</p>
+          <div className="flex flex-wrap gap-2">
+            {curated.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#835879]/40 bg-[#835879]/10 px-3 py-1 text-xs text-[#835879] hover:bg-[#835879]/20"
+                onClick={() => addTag(tag.name)}
+              >
+                <Star className="w-3 h-3" />
+                {tag.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {others.length ? (
+        <div className="flex flex-wrap gap-2">
+          {others.slice(0, 16).map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              onClick={() => addTag(tag.name)}
+            >
+              <Plus className="w-3 h-3" />
+              {tag.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ContactForm({ onSubmit, isSaving }) {
   const [form, setForm] = useState(emptyContact);
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
@@ -517,6 +619,9 @@ function ContactForm({ onSubmit, isSaving }) {
           <Textarea value={form.notes} onChange={(e) => setField("notes", e.target.value)} />
         </div>
         <div className="md:col-span-2">
+          <TagSelectField type="contact" value={form.tags} onChange={(tags) => setField("tags", tags)} />
+        </div>
+        <div className="md:col-span-2">
           <Button
             disabled={isSaving}
             onClick={() => {
@@ -528,6 +633,7 @@ function ContactForm({ onSubmit, isSaving }) {
                 phones: form.phone ? [{ phone: form.phone, is_primary: true }] : [],
                 notes: form.notes,
                 source: form.source,
+                tags: form.tags,
               });
               setForm(emptyContact);
             }}
@@ -1691,6 +1797,200 @@ function ReportBars({ title, rows, labelKey, valueKey }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const tagTypeMeta = [
+  { type: "contact", label: "People", icon: Users },
+  { type: "entity", label: "Businesses", icon: Building2 },
+  { type: "place", label: "Places", icon: MapPin },
+  { type: "general", label: "General", icon: Tags },
+];
+
+function TagLibraryRow({ tag }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(tag.name);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["crm", "tags"] });
+  const update = useMutation({
+    mutationFn: (body) => apiFetch(`/crm/tags/${tag.id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      invalidate();
+      setEditing(false);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => apiFetch(`/crm/tags/${tag.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Tag deleted");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  return (
+    <div className="flex items-center gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-slate-950">
+      <button
+        type="button"
+        title={tag.is_curated ? "Key tag — click to unmark" : "Mark as key tag"}
+        className={tag.is_curated ? "text-[#835879]" : "text-slate-300 hover:text-slate-400"}
+        onClick={() => update.mutate({ is_curated: !tag.is_curated })}
+      >
+        <Star className={`w-4 h-4 ${tag.is_curated ? "fill-[#835879]" : ""}`} />
+      </button>
+      {editing ? (
+        <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 flex-1" />
+      ) : (
+        <span className="flex-1 text-sm font-medium">{tag.name}</span>
+      )}
+      <Badge variant="outline" className="shrink-0">{tag.usage_count || 0} uses</Badge>
+      {editing ? (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!name.trim() || update.isPending}
+            onClick={() => update.mutate({ name: name.trim() })}
+          >
+            <Check className="w-4 h-4" />
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => { setName(tag.name); setEditing(false); }}>
+            <X className="w-4 h-4" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(true)} title="Rename">
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-red-600 hover:text-red-700"
+            onClick={() => {
+              if (window.confirm(`Delete "${tag.name}"? This removes it from ${tag.usage_count || 0} record(s).`)) {
+                remove.mutate();
+              }
+            }}
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TagLibraryGroup({ type, label, icon }) {
+  const queryClient = useQueryClient();
+  const [newName, setNewName] = useState("");
+  const [newKey, setNewKey] = useState(true);
+  const tagList = useQuery({
+    queryKey: ["crm", "tags", type],
+    queryFn: () => apiFetch(`/crm/tags?type=${type}`),
+  });
+  const tags = tagList.data || [];
+  const createTag = useMutation({
+    mutationFn: (body) => apiFetch("/crm/tags", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", "tags", type] });
+      setNewName("");
+      toast.success("Tag saved");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const seedStarters = useMutation({
+    mutationFn: async () => {
+      const names = starterTags[type] || [];
+      const existing = new Set(tags.map((tag) => tag.name.toLowerCase()));
+      const missing = names.filter((name) => !existing.has(name.toLowerCase()));
+      for (const name of missing) {
+        await apiFetch("/crm/tags", {
+          method: "POST",
+          body: JSON.stringify({ name, tag_type: type, is_curated: true }),
+        });
+      }
+      return missing.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["crm", "tags", type] });
+      toast.success(count ? "Starter key tags added" : "Starter tags already exist");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          {React.createElement(icon, { className: "w-4 h-4 text-[#835879]" })}
+          {label} tags
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-2">
+          {tags.length ? (
+            tags.map((tag) => <TagLibraryRow key={tag.id} tag={tag} />)
+          ) : (
+            <p className="text-sm text-slate-500">No tags yet.</p>
+          )}
+        </div>
+        <div className="flex flex-col gap-2 border-t pt-3">
+          <div className="flex gap-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newName.trim()) {
+                  e.preventDefault();
+                  createTag.mutate({ name: newName.trim(), tag_type: type, is_curated: newKey });
+                }
+              }}
+              placeholder="Add a tag"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!newName.trim() || createTag.isPending}
+              onClick={() => createTag.mutate({ name: newName.trim(), tag_type: type, is_curated: newKey })}
+            >
+              Add
+            </Button>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={newKey} onChange={(e) => setNewKey(e.target.checked)} />
+            Mark as key tag (shown as a suggestion on forms)
+          </label>
+          <Button type="button" variant="ghost" className="self-start" disabled={seedStarters.isPending} onClick={() => seedStarters.mutate()}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add starter key tags
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TagLibrarySection() {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="py-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Define a consistent set of <span className="font-medium">key tags</span> your team uses across records — for
+            example, use one "donor" tag instead of "donor", "contributor", and "giver". Key tags (★) appear as
+            suggestions when tagging records. Anyone can still add custom tags where needed.
+          </p>
+        </CardContent>
+      </Card>
+      <div className="grid lg:grid-cols-2 gap-4">
+        {tagTypeMeta.map((meta) => (
+          <TagLibraryGroup key={meta.type} type={meta.type} label={meta.label} icon={meta.icon} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2883,6 +3183,7 @@ export default function CRM() {
         {active === "places" ? <PlacesSection /> : null}
         {active === "districts" ? <DistrictsSection /> : null}
         {active === "reports" ? <ReportsSection /> : null}
+        {active === "tags" ? <TagLibrarySection /> : null}
         {active === "touchpoints" ? <ActivitySection /> : null}
         {active === "imports" ? <ImportsSection /> : null}
         {active === "duplicates" ? <DuplicatesSection /> : null}
