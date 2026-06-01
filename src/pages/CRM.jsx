@@ -2534,6 +2534,7 @@ function ImportMappingPanel({ batch, onClose }) {
     return first ? String(first.raw_json[header]).slice(0, 40) : "";
   };
   const errorRows = errorsQuery.data || [];
+  const isImporting = batch.status === "importing";
 
   return (
     <Card>
@@ -2553,7 +2554,7 @@ function ImportMappingPanel({ batch, onClose }) {
             <p className="text-xs text-slate-500">
               We pre-match columns automatically. Use AI to match unusual or differently named columns, then review below.
             </p>
-            <Button variant="outline" size="sm" onClick={() => aiMap.mutate()} disabled={aiMap.isPending}>
+            <Button variant="outline" size="sm" onClick={() => aiMap.mutate()} disabled={aiMap.isPending || isImporting}>
               <Sparkles className="w-4 h-4 mr-1" />
               {aiMap.isPending ? "Matching..." : "Auto-map with AI"}
             </Button>
@@ -2617,13 +2618,26 @@ function ImportMappingPanel({ batch, onClose }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => saveMapping.mutate()} disabled={saveMapping.isPending}>Save mapping</Button>
-          <Button variant="outline" onClick={runMapThenValidate} disabled={validate.isPending || saveMapping.isPending}>Save &amp; validate</Button>
-          <Button className="bg-[#835879] text-white" onClick={() => commit.mutate()} disabled={commit.isPending}>
-            {commit.isPending ? "Importing..." : "Commit import"}
+          <Button variant="outline" onClick={() => saveMapping.mutate()} disabled={saveMapping.isPending || isImporting}>Save mapping</Button>
+          <Button variant="outline" onClick={runMapThenValidate} disabled={validate.isPending || saveMapping.isPending || isImporting}>Save &amp; validate</Button>
+          <Button className="bg-[#835879] text-white" onClick={() => commit.mutate()} disabled={commit.isPending || isImporting}>
+            {commit.isPending || isImporting ? "Importing..." : "Commit import"}
           </Button>
         </div>
-        <p className="text-xs text-slate-500">Commit uses the last saved mapping. Click &quot;Save mapping&quot; or &quot;Save &amp; validate&quot; before committing.</p>
+        {isImporting ? (
+          <div className="rounded-xl border border-[#835879]/30 bg-[#835879]/5 p-3">
+            <p className="text-sm font-medium text-[#835879]">
+              Importing… {batch.processed_count || 0}
+              {batch.row_count ? ` / ${batch.row_count}` : ""} rows processed
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              {batch.created_count || 0} created · {batch.skipped_count || 0} skipped · {batch.error_count || 0} errors.
+              This runs in the background — you can leave this page and check back.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Commit uses the last saved mapping. Click &quot;Save mapping&quot; or &quot;Save &amp; validate&quot; before committing.</p>
+        )}
 
         {errorRows.length ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
@@ -2654,6 +2668,8 @@ function ImportsSection() {
   const imports = useQuery({
     queryKey: ["crm", "imports"],
     queryFn: () => apiFetch("/crm/imports"),
+    refetchInterval: (query) =>
+      (query.state.data || []).some((batch) => batch.status === "importing") ? 2500 : false,
   });
   const templateFields = useQuery({
     queryKey: ["crm", "import-fields", targetType],
