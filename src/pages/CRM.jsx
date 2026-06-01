@@ -1842,7 +1842,7 @@ const tagTypeMeta = [
   { type: "general", label: "General", icon: Tags },
 ];
 
-function TagLibraryRow({ tag }) {
+function TagLibraryRow({ tag, siblings = [] }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(tag.name);
@@ -1853,8 +1853,55 @@ function TagLibraryRow({ tag }) {
       invalidate();
       setEditing(false);
     },
+    onError: (error) => {
+      if (/already exists/i.test(error.message)) {
+        const target = siblings.find(
+          (other) => other.id !== tag.id && other.name.trim().toLowerCase() === name.trim().toLowerCase()
+        );
+        if (target) {
+          offerMerge(target);
+          return;
+        }
+      }
+      toast.error(error.message);
+    },
+  });
+  const mergeInto = useMutation({
+    mutationFn: (targetId) =>
+      apiFetch(`/crm/tags/${tag.id}/merge`, { method: "POST", body: JSON.stringify({ target_tag_id: targetId }) }),
+    onSuccess: () => {
+      invalidate();
+      setEditing(false);
+      toast.success("Tags merged");
+    },
     onError: (error) => toast.error(error.message),
   });
+  const offerMerge = (target) => {
+    if (
+      window.confirm(
+        `A tag named "${target.name}" already exists. Merge "${tag.name}" into it?\n\n` +
+          `All ${tag.usage_count || 0} record(s) tagged "${tag.name}" will be tagged "${target.name}", and "${tag.name}" will be removed.`
+      )
+    ) {
+      mergeInto.mutate(target.id);
+    }
+  };
+  const submitRename = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (trimmed.toLowerCase() === tag.name.toLowerCase()) {
+      setEditing(false);
+      return;
+    }
+    const target = siblings.find(
+      (other) => other.id !== tag.id && other.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (target) {
+      offerMerge(target);
+      return;
+    }
+    update.mutate({ name: trimmed });
+  };
   const remove = useMutation({
     mutationFn: () => apiFetch(`/crm/tags/${tag.id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -1874,7 +1921,17 @@ function TagLibraryRow({ tag }) {
         <Star className={`w-4 h-4 ${tag.is_curated ? "fill-[#835879]" : ""}`} />
       </button>
       {editing ? (
-        <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 flex-1" />
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submitRename();
+            }
+          }}
+          className="h-8 flex-1"
+        />
       ) : (
         <span className="flex-1 text-sm font-medium">{tag.name}</span>
       )}
@@ -1885,8 +1942,8 @@ function TagLibraryRow({ tag }) {
             type="button"
             size="sm"
             variant="outline"
-            disabled={!name.trim() || update.isPending}
-            onClick={() => update.mutate({ name: name.trim() })}
+            disabled={!name.trim() || update.isPending || mergeInto.isPending}
+            onClick={submitRename}
           >
             <Check className="w-4 h-4" />
           </Button>
@@ -1967,7 +2024,7 @@ function TagLibraryGroup({ type, label, icon }) {
       <CardContent className="space-y-3">
         <div className="space-y-2">
           {tags.length ? (
-            tags.map((tag) => <TagLibraryRow key={tag.id} tag={tag} />)
+            tags.map((tag) => <TagLibraryRow key={tag.id} tag={tag} siblings={tags} />)
           ) : (
             <p className="text-sm text-slate-500">No tags yet.</p>
           )}
