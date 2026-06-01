@@ -33,6 +33,8 @@ const campaignDefaults = {
   status: "draft",
   start_date: "",
   end_date: "",
+  related_event_id: "",
+  related_audience_id: "",
   default_instructions: "",
   script_summary: "",
 };
@@ -254,12 +256,26 @@ function CampaignList({ selectedId, onSelect, onCreate }) {
 function CampaignForm({ initial = campaignDefaults, onSubmit, compact = false }) {
   const [form, setForm] = useState({ ...campaignDefaults, ...initial });
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const events = useQuery({
+    queryKey: ["events"],
+    queryFn: () => apiFetch("/events"),
+    enabled: !compact,
+  });
+  const audiences = useQuery({
+    queryKey: ["crm", "audiences"],
+    queryFn: () => apiFetch("/crm/audiences"),
+    enabled: !compact,
+  });
   return (
     <form
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(form);
+        onSubmit({
+          ...form,
+          related_event_id: form.related_event_id || null,
+          related_audience_id: form.related_audience_id || null,
+        });
       }}
     >
       <Field label="Name">
@@ -297,6 +313,24 @@ function CampaignForm({ initial = campaignDefaults, onSubmit, compact = false })
             </Field>
             <Field label="End date">
               <Input type="date" value={form.end_date || ""} onChange={(event) => update("end_date", event.target.value)} />
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Related event">
+              <SelectField value={form.related_event_id || ""} onChange={(value) => update("related_event_id", value)}>
+                <option value="">No event</option>
+                {(events.data || []).map((event) => (
+                  <option key={event.id} value={event.id}>{event.title || event.name}</option>
+                ))}
+              </SelectField>
+            </Field>
+            <Field label="Audience / list">
+              <SelectField value={form.related_audience_id || ""} onChange={(value) => update("related_audience_id", value)}>
+                <option value="">No audience</option>
+                {(audiences.data || []).map((audience) => (
+                  <option key={audience.id} value={audience.id}>{audience.name}</option>
+                ))}
+              </SelectField>
             </Field>
           </div>
           <Field label="Default instructions">

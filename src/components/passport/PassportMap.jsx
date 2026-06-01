@@ -12,12 +12,14 @@ export default function PassportMap({
   mapConfig = {},
   onSelectStop,
   showControls = true,
-  heightClass = "h-[420px]"
+  heightClass = "h-[420px]",
+  overlays = []
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const userMarkerRef = useRef(null);
+  const overlayIdsRef = useRef([]);
   const [locationError, setLocationError] = useState(null);
 
   const visitedStopIds = useMemo(
@@ -83,6 +85,43 @@ export default function PassportMap({
       map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
     }
   }, [stops, visitedStopIds]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const applyOverlays = () => {
+      overlayIdsRef.current.forEach((sourceId) => {
+        if (map.getLayer(`${sourceId}-fill`)) map.removeLayer(`${sourceId}-fill`);
+        if (map.getLayer(`${sourceId}-line`)) map.removeLayer(`${sourceId}-line`);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+      });
+      overlayIdsRef.current = [];
+      overlays.forEach((overlay) => {
+        if (!overlay?.geojson || !overlay.id) return;
+        const sourceId = `crm-overlay-${overlay.id}`;
+        try {
+          map.addSource(sourceId, { type: "geojson", data: overlay.geojson });
+          map.addLayer({
+            id: `${sourceId}-fill`,
+            type: "fill",
+            source: sourceId,
+            paint: { "fill-color": overlay.color || "#835879", "fill-opacity": 0.12 }
+          });
+          map.addLayer({
+            id: `${sourceId}-line`,
+            type: "line",
+            source: sourceId,
+            paint: { "line-color": overlay.color || "#835879", "line-width": 2 }
+          });
+          overlayIdsRef.current.push(sourceId);
+        } catch {
+          // ignore overlay rendering errors (e.g. malformed geometry)
+        }
+      });
+    };
+    if (map.isStyleLoaded()) applyOverlays();
+    else map.once("load", applyOverlays);
+  }, [overlays]);
 
   const handleLocate = () => {
     if (!navigator.geolocation) {

@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
   Activity,
   AlertCircle,
+  BarChart3,
   Building2,
   Clock,
   CopyCheck,
@@ -12,6 +13,7 @@ import {
   FileSpreadsheet,
   GitMerge,
   MapPin,
+  Network,
   Plus,
   Search,
   Tags,
@@ -99,7 +101,9 @@ function SectionTabs({ active, setActive }) {
     ["contacts", "People", Users],
     ["entities", "Businesses", Building2],
     ["places", "Places", MapPin],
+    ["districts", "Districts", Network],
     ["touchpoints", "Activity", Activity],
+    ["reports", "Reports", BarChart3],
     ["imports", "Imports", Upload],
     ["duplicates", "Duplicates", GitMerge],
     ["audiences", "Audiences", CopyCheck],
@@ -202,11 +206,25 @@ function CrmRecordLink({ to, title, subtitle, meta }) {
 }
 
 function CrmDashboardWidgets({ data }) {
+  const queryClient = useQueryClient();
   const followUps = data?.follow_ups || [];
   const staleContacts = data?.stale_contacts || [];
   const staleEntities = data?.stale_entities || [];
   const vacantPlaces = data?.vacant_places || [];
   const recentActivity = data?.recent_activity || [];
+  const openTasks = data?.open_tasks || [];
+  const markDone = useMutation({
+    mutationFn: (id) =>
+      apiFetch(`/crm/touchpoints/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ follow_up_status: "done" }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm"] });
+      toast.success("Follow-up marked done");
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const staleRecords = [
     ...staleContacts.map((record) => ({
       id: record.id,
@@ -238,13 +256,25 @@ function CrmDashboardWidgets({ data }) {
                     ? `/crm/places/${item.related_place_id}`
                     : null;
               return (
-                <CrmRecordLink
-                  key={item.id}
-                  to={targetPath}
-                  title={item.subject || targetTitle || item.touchpoint_type}
-                  subtitle={targetTitle}
-                  meta={formatCrmDate(item.follow_up_at)}
-                />
+                <div key={item.id} className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <CrmRecordLink
+                      to={targetPath}
+                      title={item.subject || targetTitle || item.touchpoint_type}
+                      subtitle={targetTitle}
+                      meta={formatCrmDate(item.follow_up_at)}
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    disabled={markDone.isPending}
+                    onClick={() => markDone.mutate(item.id)}
+                  >
+                    Done
+                  </Button>
+                </div>
               );
             })
           : null}
@@ -285,6 +315,29 @@ function CrmDashboardWidgets({ data }) {
                   title={item.subject || item.touchpoint_type}
                   subtitle={[targetTitle, item.body?.slice(0, 60)].filter(Boolean).join(" · ")}
                   meta={formatCrmDate(item.occurred_at)}
+                />
+              );
+            })
+          : null}
+      </CrmWidget>
+      <CrmWidget title="Open Tasks" icon={Clock} emptyText="No open CRM-linked tasks.">
+        {openTasks.length
+          ? openTasks.map((task) => {
+              const targetTitle = task.contact_name || task.entity_name || task.place_name;
+              const targetPath = task.contact_id
+                ? `/crm/contacts/${task.contact_id}`
+                : task.entity_id
+                  ? `/crm/entities/${task.entity_id}`
+                  : task.place_id
+                    ? `/crm/places/${task.place_id}`
+                    : null;
+              return (
+                <CrmRecordLink
+                  key={task.id}
+                  to={targetPath}
+                  title={task.title}
+                  subtitle={[targetTitle, task.assigned_to_name].filter(Boolean).join(" · ")}
+                  meta={task.due_date ? formatCrmDate(task.due_date) : "No due date"}
                 />
               );
             })
@@ -360,7 +413,34 @@ function QuickTouchpointPanel({ title = "Log Touchpoint", defaults, onCancel }) 
   );
 }
 
-function PlaceMapView({ places = [], onLogCanvassing }) {
+const DISTRICT_OVERLAY_COLORS = ["#835879", "#1d4ed8", "#0f766e", "#b45309", "#9333ea", "#be123c"];
+
+function normalizeGeoJson(value) {
+  if (!value) return null;
+  let geo = value;
+  if (typeof geo === "string") {
+    try {
+      geo = JSON.parse(geo);
+    } catch {
+      return null;
+    }
+  }
+  if (geo.type === "FeatureCollection" || geo.type === "Feature") return geo;
+  if (geo.type && geo.coordinates) return { type: "Feature", properties: {}, geometry: geo };
+  return null;
+}
+
+function buildDistrictOverlays(districts = []) {
+  return districts
+    .map((district, index) => {
+      const geojson = normalizeGeoJson(district.geometry_geojson);
+      if (!geojson) return null;
+      return { id: district.id, geojson, color: DISTRICT_OVERLAY_COLORS[index % DISTRICT_OVERLAY_COLORS.length] };
+    })
+    .filter(Boolean);
+}
+
+function PlaceMapView({ places = [], onLogCanvassing, overlays = [] }) {
   const mappedPlaces = places
     .filter((place) => Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)))
     .map((place) => ({
@@ -386,6 +466,7 @@ function PlaceMapView({ places = [], onLogCanvassing }) {
           showControls
           heightClass="h-[360px]"
           onSelectStop={(place) => onLogCanvassing?.(place)}
+          overlays={overlays}
         />
         <p className="text-sm text-slate-500">
           Click a mapped place to start a canvassing note. Places need latitude and longitude to appear on the map.
@@ -602,20 +683,38 @@ function TouchpointComposer({ defaults = {}, onSaved }) {
     follow_up_status: "none",
     ...defaults,
   });
+  const [reminder, setReminder] = useState({ enabled: false, assigned_to_id: "", due: "", title: "" });
+  const users = useQuery({
+    queryKey: ["crm", "users"],
+    queryFn: () => apiFetch("/users"),
+    staleTime: 5 * 60 * 1000,
+  });
   const mutation = useMutation({
     mutationFn: (payload) =>
       apiFetch("/crm/touchpoints", {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["crm"] });
-      toast.success("Touchpoint saved");
+      toast.success(result?.reminder_task ? "Touchpoint saved and reminder created" : "Touchpoint saved");
       setForm((prev) => ({ ...prev, subject: "", body: "", follow_up_at: "" }));
+      setReminder({ enabled: false, assigned_to_id: "", due: "", title: "" });
       onSaved?.();
     },
     onError: (error) => toast.error(error.message),
   });
+  const submit = () => {
+    const payload = { ...form };
+    if (reminder.enabled) {
+      payload.create_task = true;
+      payload.task_assigned_to_id = reminder.assigned_to_id || undefined;
+      payload.task_due_date = reminder.due || form.follow_up_at || undefined;
+      payload.task_title = reminder.title || form.subject || undefined;
+      if (payload.follow_up_status === "none") payload.follow_up_status = "needed";
+    }
+    mutation.mutate(payload);
+  };
   return (
     <Card>
       <CardHeader>
@@ -643,8 +742,51 @@ function TouchpointComposer({ defaults = {}, onSaved }) {
           <Label>Notes</Label>
           <Textarea value={form.body} onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))} />
         </div>
-        <Button disabled={mutation.isPending} onClick={() => mutation.mutate(form)}>
-          Save Touchpoint
+        <div className="rounded-xl border p-3 space-y-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={reminder.enabled}
+              onChange={(e) => setReminder((p) => ({ ...p, enabled: e.target.checked }))}
+            />
+            Set a reminder (creates a task)
+          </label>
+          {reminder.enabled ? (
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <Label>Assign to</Label>
+                <select
+                  className="w-full border rounded-md h-10 px-3 bg-white dark:bg-slate-950"
+                  value={reminder.assigned_to_id}
+                  onChange={(e) => setReminder((p) => ({ ...p, assigned_to_id: e.target.value }))}
+                >
+                  <option value="">Me</option>
+                  {(users.data || []).map((u) => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Due date</Label>
+                <Input
+                  type="date"
+                  value={reminder.due}
+                  onChange={(e) => setReminder((p) => ({ ...p, due: e.target.value }))}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Reminder title</Label>
+                <Input
+                  placeholder={form.subject || "Follow up"}
+                  value={reminder.title}
+                  onChange={(e) => setReminder((p) => ({ ...p, title: e.target.value }))}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <Button disabled={mutation.isPending} onClick={submit}>
+          {reminder.enabled ? "Save & create reminder" : "Save Touchpoint"}
         </Button>
       </CardContent>
     </Card>
@@ -1143,15 +1285,119 @@ function TagManager({ type, recordId, tags = [] }) {
   );
 }
 
+function useCrmUsers() {
+  return useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiFetch("/users"),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+function OwnerPicker({ recordType, id, ownerUserId }) {
+  const queryClient = useQueryClient();
+  const users = useCrmUsers();
+  const mutation = useMutation({
+    mutationFn: (value) =>
+      apiFetch("/crm/bulk", {
+        method: "POST",
+        body: JSON.stringify(
+          value
+            ? { record_type: recordType, ids: [id], action: "assign_owner", owner_user_id: value }
+            : { record_type: recordType, ids: [id], action: "remove_owner" }
+        ),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm"] });
+      toast.success("Owner updated");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  return (
+    <select
+      className="border rounded-md h-9 px-2 text-sm bg-white dark:bg-slate-950"
+      value={ownerUserId || ""}
+      onChange={(e) => mutation.mutate(e.target.value)}
+    >
+      <option value="">Unassigned</option>
+      {(users.data || []).map((u) => (
+        <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+      ))}
+    </select>
+  );
+}
+
+function OwnerFilter({ value, onChange }) {
+  return (
+    <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+      <input type="checkbox" checked={value === "me"} onChange={(e) => onChange(e.target.checked ? "me" : "")} />
+      Owned by me
+    </label>
+  );
+}
+
+function BulkBar({ recordType, selectedIds, onCleared }) {
+  const queryClient = useQueryClient();
+  const users = useCrmUsers();
+  const [owner, setOwner] = useState("");
+  const [tag, setTag] = useState("");
+  const bulk = useMutation({
+    mutationFn: (payload) =>
+      apiFetch("/crm/bulk", {
+        method: "POST",
+        body: JSON.stringify({ record_type: recordType, ids: selectedIds, ...payload }),
+      }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["crm"] });
+      toast.success(`Updated ${res.updated ?? res.tagged ?? 0} record(s)`);
+      setOwner("");
+      setTag("");
+      onCleared?.();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  if (!selectedIds.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-slate-50 dark:bg-slate-900 p-2">
+      <span className="text-sm font-medium">{selectedIds.length} selected</span>
+      <select
+        className="border rounded-md h-8 px-2 text-sm bg-white dark:bg-slate-950"
+        value={owner}
+        onChange={(e) => setOwner(e.target.value)}
+      >
+        <option value="">Set owner…</option>
+        <option value="__none">Unassign owner</option>
+        {(users.data || []).map((u) => (
+          <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+        ))}
+      </select>
+      <Button
+        size="sm"
+        disabled={!owner || bulk.isPending}
+        onClick={() => (owner === "__none" ? bulk.mutate({ action: "remove_owner" }) : bulk.mutate({ action: "assign_owner", owner_user_id: owner }))}
+      >
+        Apply owner
+      </Button>
+      <Input className="h-8 w-40" placeholder="Add tag" value={tag} onChange={(e) => setTag(e.target.value)} />
+      <Button size="sm" disabled={!tag.trim() || bulk.isPending} onClick={() => bulk.mutate({ action: "add_tag", tag })}>
+        Add tag
+      </Button>
+      <Button size="sm" variant="ghost" onClick={onCleared}>Clear</Button>
+    </div>
+  );
+}
+
 function ContactsSection() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
+  const [owner, setOwner] = useState("");
+  const [selected, setSelected] = useState([]);
   const [quickTouchpoint, setQuickTouchpoint] = useState(null);
   const contacts = useQuery({
-    queryKey: ["crm", "contacts", query, tag],
-    queryFn: () => apiFetch(`/crm/contacts?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}`),
+    queryKey: ["crm", "contacts", query, tag, owner],
+    queryFn: () => apiFetch(`/crm/contacts?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}&owner=${encodeURIComponent(owner)}`),
   });
+  const toggleSelected = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const createContact = useMutation({
     mutationFn: (payload) =>
       apiFetch("/crm/contacts", { method: "POST", body: JSON.stringify(payload) }),
@@ -1168,22 +1414,27 @@ function ContactsSection() {
           <CardTitle>People</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
             <div className="flex-1">
               <SearchBox value={query} onChange={setQuery} placeholder="Search by name or email" />
             </div>
+            <OwnerFilter value={owner} onChange={setOwner} />
             <TagFilter type="contact" value={tag} onChange={setTag} />
           </div>
+          <BulkBar recordType="contact" selectedIds={selected} onCleared={() => setSelected([])} />
           <div className="divide-y">
             {(contacts.data?.rows || []).map((contact) => (
               <div key={contact.id} className="py-3 hover:bg-slate-50 rounded-lg px-2">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <Link to={`/crm/contacts/${contact.id}`} className="flex-1">
-                    <div>
-                      <p className="font-medium">{contact.display_name}</p>
-                      <p className="text-sm text-slate-500">{contact.primary_email || contact.primary_phone || "No contact method yet"}</p>
-                    </div>
-                  </Link>
+                  <div className="flex items-start gap-3 flex-1">
+                    <input type="checkbox" className="mt-1" checked={selected.includes(contact.id)} onChange={() => toggleSelected(contact.id)} />
+                    <Link to={`/crm/contacts/${contact.id}`} className="flex-1">
+                      <div>
+                        <p className="font-medium">{contact.display_name}</p>
+                        <p className="text-sm text-slate-500">{[contact.primary_email || contact.primary_phone || "No contact method yet", contact.owner_name ? `Owner: ${contact.owner_name}` : null].filter(Boolean).join(" · ")}</p>
+                      </div>
+                    </Link>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -1222,11 +1473,14 @@ function EntitiesSection() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
+  const [owner, setOwner] = useState("");
+  const [selected, setSelected] = useState([]);
   const [quickTouchpoint, setQuickTouchpoint] = useState(null);
   const entities = useQuery({
-    queryKey: ["crm", "entities", query, tag],
-    queryFn: () => apiFetch(`/crm/entities?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}`),
+    queryKey: ["crm", "entities", query, tag, owner],
+    queryFn: () => apiFetch(`/crm/entities?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}&owner=${encodeURIComponent(owner)}`),
   });
+  const toggleSelected = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const createEntity = useMutation({
     mutationFn: (payload) =>
       apiFetch("/crm/entities", { method: "POST", body: JSON.stringify(payload) }),
@@ -1243,20 +1497,25 @@ function EntitiesSection() {
           <CardTitle>Businesses and Organizations</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
             <div className="flex-1">
               <SearchBox value={query} onChange={setQuery} placeholder="Search by name, category, or email" />
             </div>
+            <OwnerFilter value={owner} onChange={setOwner} />
             <TagFilter type="entity" value={tag} onChange={setTag} />
           </div>
+          <BulkBar recordType="entity" selectedIds={selected} onCleared={() => setSelected([])} />
           <div className="divide-y">
             {(entities.data?.rows || []).map((entity) => (
               <div key={entity.id} className="py-3 hover:bg-slate-50 rounded-lg px-2">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <Link to={`/crm/entities/${entity.id}`} className="flex-1">
-                    <p className="font-medium">{entity.name}</p>
-                    <p className="text-sm text-slate-500">{[entity.entity_type, entity.category, entity.general_email].filter(Boolean).join(" · ")}</p>
-                  </Link>
+                  <div className="flex items-start gap-3 flex-1">
+                    <input type="checkbox" className="mt-1" checked={selected.includes(entity.id)} onChange={() => toggleSelected(entity.id)} />
+                    <Link to={`/crm/entities/${entity.id}`} className="flex-1">
+                      <p className="font-medium">{entity.name}</p>
+                      <p className="text-sm text-slate-500">{[entity.entity_type, entity.category, entity.general_email, entity.owner_name ? `Owner: ${entity.owner_name}` : null].filter(Boolean).join(" · ")}</p>
+                    </Link>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -1295,11 +1554,26 @@ function PlacesSection() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
+  const [districtId, setDistrictId] = useState("");
+  const [owner, setOwner] = useState("");
+  const [selected, setSelected] = useState([]);
   const [quickTouchpoint, setQuickTouchpoint] = useState(null);
-  const places = useQuery({
-    queryKey: ["crm", "places", query, tag],
-    queryFn: () => apiFetch(`/crm/places?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}`),
+  const districts = useQuery({
+    queryKey: ["crm", "districts"],
+    queryFn: () => apiFetch("/crm/districts"),
   });
+  const places = useQuery({
+    queryKey: ["crm", "places", query, tag, districtId, owner],
+    queryFn: () =>
+      apiFetch(
+        `/crm/places?query=${encodeURIComponent(query)}&tag=${encodeURIComponent(tag)}&district_id=${encodeURIComponent(districtId)}&owner=${encodeURIComponent(owner)}`
+      ),
+  });
+  const toggleSelected = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const overlayDistricts = districtId
+    ? (districts.data || []).filter((d) => d.id === districtId)
+    : (districts.data || []).filter((d) => d.is_active);
+  const overlays = useMemo(() => buildDistrictOverlays(overlayDistricts), [overlayDistricts]);
   const createPlace = useMutation({
     mutationFn: (payload) =>
       apiFetch("/crm/places", { method: "POST", body: JSON.stringify(payload) }),
@@ -1313,6 +1587,7 @@ function PlacesSection() {
     <div className="space-y-6">
       <PlaceMapView
         places={places.data?.rows || []}
+        overlays={overlays}
         onLogCanvassing={(place) =>
           setQuickTouchpoint({
             related_place_id: place.id,
@@ -1331,16 +1606,31 @@ function PlacesSection() {
               <div className="flex-1">
                 <SearchBox value={query} onChange={setQuery} placeholder="Search by place, address, or parcel ID" />
               </div>
+              <select
+                className="border rounded-md h-10 px-3 bg-white dark:bg-slate-950 text-sm"
+                value={districtId}
+                onChange={(e) => setDistrictId(e.target.value)}
+              >
+                <option value="">All districts</option>
+                {(districts.data || []).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <OwnerFilter value={owner} onChange={setOwner} />
               <TagFilter type="place" value={tag} onChange={setTag} />
             </div>
+            <BulkBar recordType="place" selectedIds={selected} onCleared={() => setSelected([])} />
             <div className="divide-y">
               {(places.data?.rows || []).map((place) => (
                 <div key={place.id} className="py-3 hover:bg-slate-50 rounded-lg px-2">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div className="flex items-start gap-3 flex-1">
+                    <input type="checkbox" className="mt-1" checked={selected.includes(place.id)} onChange={() => toggleSelected(place.id)} />
                     <Link to={`/crm/places/${place.id}`} className="flex-1">
                     <p className="font-medium">{place.place_name || place.line1 || "Unnamed place"}</p>
-                    <p className="text-sm text-slate-500">{[place.line1, place.city, place.state, place.occupancy_status].filter(Boolean).join(" · ")}</p>
+                    <p className="text-sm text-slate-500">{[place.line1, place.city, place.state, place.occupancy_status, place.district_name, place.owner_name ? `Owner: ${place.owner_name}` : null].filter(Boolean).join(" · ")}</p>
                     </Link>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
@@ -1376,6 +1666,347 @@ function PlacesSection() {
   );
 }
 
+function ReportBars({ title, rows, labelKey, valueKey }) {
+  const max = Math.max(1, ...rows.map((r) => Number(r[valueKey]) || 0));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.length ? (
+          rows.map((row, idx) => (
+            <div key={`${row[labelKey]}-${idx}`} className="space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="capitalize">{row[labelKey] || "—"}</span>
+                <span className="text-slate-500">{row[valueKey]}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div className="h-full bg-[#835879]" style={{ width: `${((Number(row[valueKey]) || 0) / max) * 100}%` }} />
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">No data yet.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReportsSection() {
+  const reports = useQuery({
+    queryKey: ["crm", "reports"],
+    queryFn: () => apiFetch("/crm/reports"),
+  });
+  if (reports.isLoading) return <p className="text-sm text-slate-500">Loading reports…</p>;
+  const data = reports.data || {};
+  const totals = data.totals || {};
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-4 gap-4">
+        <StatCard icon={Users} label="People" value={totals.contacts} />
+        <StatCard icon={Building2} label="Businesses" value={totals.entities} />
+        <StatCard icon={MapPin} label="Places" value={totals.places} />
+        <StatCard icon={Activity} label="Touchpoints" value={totals.touchpoints} />
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Follow-ups</CardTitle>
+          </CardHeader>
+          <CardContent className="flex gap-8">
+            <div>
+              <p className="text-3xl font-bold text-[#2d4650] dark:text-slate-100">{data.follow_ups?.open || 0}</p>
+              <p className="text-sm text-slate-500">Open</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-red-600">{data.follow_ups?.overdue || 0}</p>
+              <p className="text-sm text-slate-500">Overdue</p>
+            </div>
+          </CardContent>
+        </Card>
+        <ReportBars title="Records by owner" rows={data.owners || []} labelKey="owner" valueKey="count" />
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <ReportBars title="Touchpoints by type" rows={data.touchpoints_by_type || []} labelKey="touchpoint_type" valueKey="count" />
+        <ReportBars title="Touchpoints by week (last 8)" rows={data.touchpoints_by_week || []} labelKey="week" valueKey="count" />
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        <ReportBars title="People by status" rows={data.status?.contacts || []} labelKey="status" valueKey="count" />
+        <ReportBars title="Businesses by status" rows={data.status?.entities || []} labelKey="status" valueKey="count" />
+        <ReportBars title="Places by occupancy" rows={data.status?.places || []} labelKey="status" valueKey="count" />
+      </div>
+    </div>
+  );
+}
+
+function DistrictsSection() {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ name: "", district_type: "", geometry: "" });
+  const [editing, setEditing] = useState(null);
+  const districts = useQuery({
+    queryKey: ["crm", "districts"],
+    queryFn: () => apiFetch("/crm/districts"),
+  });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["crm", "districts"] });
+  const parseGeometry = (text) => {
+    if (!text || !text.trim()) return undefined;
+    try {
+      return JSON.parse(text);
+    } catch {
+      toast.error("Geometry must be valid GeoJSON");
+      throw new Error("Invalid GeoJSON");
+    }
+  };
+  const createDistrict = useMutation({
+    mutationFn: (payload) => apiFetch("/crm/districts", { method: "POST", body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("District created");
+      setForm({ name: "", district_type: "", geometry: "" });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const updateDistrict = useMutation({
+    mutationFn: ({ id, payload }) => apiFetch(`/crm/districts/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("District updated");
+      setEditing(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const deleteDistrict = useMutation({
+    mutationFn: (id) => apiFetch(`/crm/districts/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("District deleted");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const submitCreate = () => {
+    if (!form.name.trim()) {
+      toast.error("District name is required");
+      return;
+    }
+    let geometry;
+    try {
+      geometry = parseGeometry(form.geometry);
+    } catch {
+      return;
+    }
+    createDistrict.mutate({
+      name: form.name,
+      district_type: form.district_type || undefined,
+      geometry_geojson: geometry,
+    });
+  };
+
+  return (
+    <div className="grid lg:grid-cols-[1fr_380px] gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Districts</CardTitle>
+          <p className="text-sm text-slate-500">Group places into neighborhoods, BIDs, wards, or service areas. Districts with geometry render as map overlays.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(districts.data || []).map((district) => (
+            <div key={district.id} className="border rounded-xl p-3">
+              {editing?.id === district.id ? (
+                <div className="space-y-2">
+                  <Input value={editing.name} onChange={(e) => setEditing((p) => ({ ...p, name: e.target.value }))} />
+                  <Input
+                    placeholder="Type (e.g. BID, ward)"
+                    value={editing.district_type || ""}
+                    onChange={(e) => setEditing((p) => ({ ...p, district_type: e.target.value }))}
+                  />
+                  <Textarea
+                    placeholder="GeoJSON geometry (optional)"
+                    value={editing.geometry || ""}
+                    onChange={(e) => setEditing((p) => ({ ...p, geometry: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={updateDistrict.isPending}
+                      onClick={() => {
+                        let geometry;
+                        try {
+                          geometry = parseGeometry(editing.geometry);
+                        } catch {
+                          return;
+                        }
+                        updateDistrict.mutate({
+                          id: district.id,
+                          payload: {
+                            name: editing.name,
+                            district_type: editing.district_type || null,
+                            geometry_geojson: geometry,
+                          },
+                        });
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{district.name}</p>
+                    <p className="text-sm text-slate-500">
+                      {[district.district_type, `${district.place_count} place${district.place_count === 1 ? "" : "s"}`, district.geometry_geojson ? "Has map overlay" : "No overlay"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!district.is_active ? <Badge variant="outline">Inactive</Badge> : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => updateDistrict.mutate({ id: district.id, payload: { is_active: !district.is_active } })}
+                    >
+                      {district.is_active ? "Deactivate" : "Activate"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setEditing({
+                          id: district.id,
+                          name: district.name,
+                          district_type: district.district_type || "",
+                          geometry: district.geometry_geojson ? JSON.stringify(district.geometry_geojson, null, 2) : "",
+                        })
+                      }
+                    >
+                      Edit
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteDistrict.mutate(district.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {!districts.isLoading && !(districts.data || []).length ? (
+            <p className="text-sm text-slate-500 py-8 text-center">No districts yet. Create one to organize places.</p>
+          ) : null}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="w-5 h-5" />
+            Add District
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Name</Label>
+            <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div>
+            <Label>Type</Label>
+            <Input placeholder="BID, ward, neighborhood…" value={form.district_type} onChange={(e) => setForm((p) => ({ ...p, district_type: e.target.value }))} />
+          </div>
+          <div>
+            <Label>Boundary GeoJSON (optional)</Label>
+            <Textarea
+              placeholder='{"type":"Polygon","coordinates":[...]}'
+              value={form.geometry}
+              onChange={(e) => setForm((p) => ({ ...p, geometry: e.target.value }))}
+            />
+            <p className="text-xs text-slate-500 mt-1">Paste a Polygon, Feature, or FeatureCollection to draw this district on place maps.</p>
+          </div>
+          <Button disabled={createDistrict.isPending} onClick={submitCreate}>Save District</Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+const ACTIVITY_RECORD_TYPES = [
+  { id: "contact", label: "Person", searchPath: "/crm/contacts", idField: "related_contact_id", placeholder: "Search people" },
+  { id: "entity", label: "Business", searchPath: "/crm/entities", idField: "related_entity_id", placeholder: "Search businesses" },
+  { id: "place", label: "Place", searchPath: "/crm/places", idField: "related_place_id", placeholder: "Search places" },
+];
+
+function ActivityComposer() {
+  const [recordType, setRecordType] = useState("contact");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+  const config = ACTIVITY_RECORD_TYPES.find((entry) => entry.id === recordType) || ACTIVITY_RECORD_TYPES[0];
+  const results = useQuery({
+    queryKey: ["crm", "activity-picker", recordType, query],
+    queryFn: () => apiFetch(`${config.searchPath}?query=${encodeURIComponent(query)}`),
+    enabled: query.trim().length > 1,
+  });
+  const composerDefaults = selected ? { [config.idField]: selected.id } : {};
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Log activity</CardTitle>
+          <p className="text-sm text-slate-500">Attach this touchpoint to a person, business, or place.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            {ACTIVITY_RECORD_TYPES.map((entry) => (
+              <Button
+                key={entry.id}
+                variant={recordType === entry.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setRecordType(entry.id);
+                  setSelected(null);
+                }}
+              >
+                {entry.label}
+              </Button>
+            ))}
+          </div>
+          {selected ? (
+            <div className="flex items-center justify-between rounded-xl border p-2 text-sm">
+              <span className="font-medium">{getRecordLabel(selected)}</span>
+              <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Change</Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <SearchBox value={query} onChange={setQuery} placeholder={config.placeholder} />
+              {query.trim().length > 1 ? (
+                <div className="max-h-40 overflow-auto rounded-xl border divide-y">
+                  {(results.data || []).map((record) => (
+                    <button
+                      key={record.id}
+                      type="button"
+                      className="w-full text-left p-2 hover:bg-slate-50 dark:hover:bg-slate-900"
+                      onClick={() => {
+                        setSelected(record);
+                        setQuery("");
+                      }}
+                    >
+                      <p className="text-sm font-medium">{getRecordLabel(record)}</p>
+                      <p className="text-xs text-slate-500">{getRecordSubLabel(record)}</p>
+                    </button>
+                  ))}
+                  {!(results.data || []).length ? <p className="p-2 text-xs text-slate-500">No matches.</p> : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <TouchpointComposer key={selected?.id || "none"} defaults={composerDefaults} onSaved={() => setSelected(null)} />
+    </div>
+  );
+}
+
 function ActivitySection() {
   const touchpoints = useQuery({
     queryKey: ["crm", "touchpoints"],
@@ -1400,17 +2031,245 @@ function ActivitySection() {
           ))}
         </CardContent>
       </Card>
-      <TouchpointComposer />
+      <ActivityComposer />
     </div>
+  );
+}
+
+const IMPORT_TARGET_LABELS = { contacts: "Contacts", entities: "Businesses", places: "Places" };
+
+function downloadCsvFile(filename, sheet) {
+  const csv = XLSX.utils.sheet_to_csv(sheet);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function suggestImportField(header, fields) {
+  const key = String(header || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!key) return "ignore";
+  for (const field of fields) {
+    const fieldKey = field.key.replace(/_/g, " ");
+    const label = field.label.toLowerCase();
+    if (key === fieldKey || key === field.key) return field.key;
+    if (label.includes(key) || key.includes(fieldKey)) return field.key;
+  }
+  return "ignore";
+}
+
+function ImportMappingPanel({ batch, onClose }) {
+  const queryClient = useQueryClient();
+  const [overrides, setOverrides] = useState({});
+  const [saveAs, setSaveAs] = useState("");
+  const [skipExisting, setSkipExisting] = useState(true);
+  const [geocode, setGeocode] = useState(batch.target_type === "places");
+  const [importTag, setImportTag] = useState("");
+
+  const preview = useQuery({
+    queryKey: ["crm", "imports", batch.id, "preview"],
+    queryFn: () => apiFetch(`/crm/imports/${batch.id}/preview`),
+  });
+  const fieldsQuery = useQuery({
+    queryKey: ["crm", "import-fields", batch.target_type],
+    queryFn: () => apiFetch(`/crm/import-fields?target_type=${batch.target_type}`),
+  });
+  const errorsQuery = useQuery({
+    queryKey: ["crm", "imports", batch.id, "errors"],
+    queryFn: () => apiFetch(`/crm/imports/${batch.id}/errors`),
+  });
+
+  const fields = useMemo(() => fieldsQuery.data?.fields || [], [fieldsQuery.data]);
+  const rows = useMemo(() => preview.data?.rows || [], [preview.data]);
+  const headers = useMemo(() => {
+    const first = rows.find((row) => row.raw_json && typeof row.raw_json === "object");
+    if (!first) return [];
+    return Object.keys(first.raw_json).filter((key) => key !== "_mapping");
+  }, [rows]);
+  const autoMapping = useMemo(() => {
+    const map = {};
+    for (const header of headers) map[header] = suggestImportField(header, fields);
+    return map;
+  }, [headers, fields]);
+  const mapping = { ...autoMapping, ...overrides };
+
+  const saveMapping = useMutation({
+    mutationFn: () =>
+      apiFetch(`/crm/imports/${batch.id}/map`, {
+        method: "POST",
+        body: JSON.stringify({ mapping, save_as: saveAs || undefined }),
+      }),
+    onSuccess: () => toast.success("Column mapping saved"),
+    onError: (error) => toast.error(error.message),
+  });
+  const validate = useMutation({
+    mutationFn: () => apiFetch(`/crm/imports/${batch.id}/validate`, { method: "POST" }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["crm", "imports", batch.id, "errors"] });
+      queryClient.invalidateQueries({ queryKey: ["crm", "imports"] });
+      if (result.valid) toast.success("All rows valid");
+      else toast.warning(`${result.error_rows} row(s) need attention`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const commit = useMutation({
+    mutationFn: () =>
+      apiFetch(`/crm/imports/${batch.id}/commit`, {
+        method: "POST",
+        body: JSON.stringify({ skip_existing: skipExisting, geocode, import_tag: importTag || undefined }),
+      }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["crm"] });
+      toast.success(`Imported ${result.created}, skipped ${result.skipped}, errors ${result.errors}`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const runMapThenValidate = async () => {
+    await saveMapping.mutateAsync();
+    await validate.mutateAsync();
+  };
+  const downloadFailedRows = () => {
+    const errorRows = errorsQuery.data || [];
+    if (!errorRows.length) {
+      toast.info("No failed rows to download");
+      return;
+    }
+    const data = errorRows.map((err) => ({
+      row_number: err.row_number,
+      field: err.field_name,
+      problem: err.message,
+      ...(err.raw_json || {}),
+    }));
+    downloadCsvFile(`import-errors-${batch.id}.csv`, XLSX.utils.json_to_sheet(data));
+  };
+
+  const sampleFor = (header) => {
+    const first = rows.find((row) => row.raw_json && row.raw_json[header]);
+    return first ? String(first.raw_json[header]).slice(0, 40) : "";
+  };
+  const errorRows = errorsQuery.data || [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span>Map columns &middot; {batch.source_filename || "import"}</span>
+          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        </CardTitle>
+        <p className="text-sm text-slate-500">
+          Match each spreadsheet column to a {IMPORT_TARGET_LABELS[batch.target_type] || batch.target_type} field. Unmatched columns are ignored.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {preview.isLoading ? <p className="text-sm text-slate-500">Loading preview...</p> : null}
+        {headers.length ? (
+          <div className="overflow-auto rounded-xl border">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900">
+                <tr>
+                  <th className="text-left p-2 font-medium">Spreadsheet column</th>
+                  <th className="text-left p-2 font-medium">Sample</th>
+                  <th className="text-left p-2 font-medium">Import as</th>
+                </tr>
+              </thead>
+              <tbody>
+                {headers.map((header) => (
+                  <tr key={header} className="border-t">
+                    <td className="p-2 font-medium">{header}</td>
+                    <td className="p-2 text-slate-500">{sampleFor(header)}</td>
+                    <td className="p-2">
+                      <select
+                        className="w-full border rounded-md h-9 px-2 bg-white dark:bg-slate-950"
+                        value={mapping[header] || "ignore"}
+                        onChange={(e) => setOverrides((prev) => ({ ...prev, [header]: e.target.value }))}
+                      >
+                        <option value="ignore">(do not import)</option>
+                        {fields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          !preview.isLoading && <p className="text-sm text-slate-500">No rows detected in this file.</p>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-3">
+          <div>
+            <Label>Save mapping as (optional)</Label>
+            <Input value={saveAs} onChange={(e) => setSaveAs(e.target.value)} placeholder="e.g. Mailchimp export" />
+          </div>
+          <div>
+            <Label>Tag every imported record (optional)</Label>
+            <Input value={importTag} onChange={(e) => setImportTag(e.target.value)} placeholder="e.g. 2026 migration" />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />
+            Skip records that already exist (match by email / name / parcel)
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={geocode} onChange={(e) => setGeocode(e.target.checked)} />
+            Geocode addresses for the map
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => saveMapping.mutate()} disabled={saveMapping.isPending}>Save mapping</Button>
+          <Button variant="outline" onClick={runMapThenValidate} disabled={validate.isPending || saveMapping.isPending}>Save &amp; validate</Button>
+          <Button className="bg-[#835879] text-white" onClick={() => commit.mutate()} disabled={commit.isPending}>
+            {commit.isPending ? "Importing..." : "Commit import"}
+          </Button>
+        </div>
+        <p className="text-xs text-slate-500">Commit uses the last saved mapping. Click &quot;Save mapping&quot; or &quot;Save &amp; validate&quot; before committing.</p>
+
+        {errorRows.length ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="font-medium flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                <AlertCircle className="w-4 h-4" /> {errorRows.length} validation issue(s)
+              </p>
+              <Button variant="outline" size="sm" onClick={downloadFailedRows}>
+                <Download className="w-4 h-4 mr-1" /> Download failed rows
+              </Button>
+            </div>
+            <ul className="text-sm text-amber-800 dark:text-amber-200 space-y-1 max-h-48 overflow-auto">
+              {errorRows.slice(0, 25).map((err) => (
+                <li key={err.id}>Row {err.row_number}: {err.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
 function ImportsSection() {
   const queryClient = useQueryClient();
   const [targetType, setTargetType] = useState("contacts");
+  const [activeBatchId, setActiveBatchId] = useState(null);
   const imports = useQuery({
     queryKey: ["crm", "imports"],
     queryFn: () => apiFetch("/crm/imports"),
+  });
+  const templateFields = useQuery({
+    queryKey: ["crm", "import-fields", targetType],
+    queryFn: () => apiFetch(`/crm/import-fields?target_type=${targetType}`),
   });
   const upload = useMutation({
     mutationFn: async (file) => {
@@ -1428,60 +2287,82 @@ function ImportsSection() {
       formData.append("source_system", "spreadsheet");
       return apiFetch("/crm/imports/upload", { method: "POST", body: formData });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["crm", "imports"] });
-      toast.success("Import uploaded");
+      toast.success("Import uploaded - map the columns next");
+      if (result?.batch?.id) setActiveBatchId(result.batch.id);
     },
     onError: (error) => toast.error(error.message),
   });
-  const commit = useMutation({
-    mutationFn: (id) => apiFetch(`/crm/imports/${id}/commit`, { method: "POST" }),
-    onSuccess: () => {
+  const rollback = useMutation({
+    mutationFn: (id) => apiFetch(`/crm/imports/${id}/rollback`, { method: "POST" }),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["crm"] });
-      toast.success("Import committed");
+      toast.success(`Rolled back ${result.count} record(s)`);
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const downloadTemplate = () => {
+    const labels = (templateFields.data?.fields || []).map((field) => field.label);
+    if (!labels.length) return;
+    downloadCsvFile(`${targetType}-import-template.csv`, XLSX.utils.aoa_to_sheet([labels]));
+  };
+
+  const activeBatch = (imports.data || []).find((batch) => batch.id === activeBatchId) || null;
+
   return (
-    <div className="grid lg:grid-cols-[360px_1fr] gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5" />
-            Upload Import
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>Target type</Label>
-            <select className="w-full border rounded-md h-10 px-3 bg-white" value={targetType} onChange={(e) => setTargetType(e.target.value)}>
-              <option value="contacts">Contacts</option>
-              <option value="entities">Businesses</option>
-            </select>
-          </div>
-          <Input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => e.target.files?.[0] && upload.mutate(e.target.files[0])} />
-          <p className="text-sm text-slate-500">CSV and Excel files are previewed into repeatable import batches before commit.</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Import Batches</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(imports.data || []).map((batch) => (
-            <div key={batch.id} className="border rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div>
-                <p className="font-medium">{batch.source_filename || batch.source_system}</p>
-                <p className="text-sm text-slate-500">{batch.target_type} · {batch.row_count} rows · {batch.status}</p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => commit.mutate(batch.id)}>Commit</Button>
-                <Button variant="outline" onClick={() => apiFetch(`/crm/imports/${batch.id}/validate`, { method: "POST" }).then(() => toast.success("Validated"))}>Validate</Button>
-              </div>
+    <div className="space-y-6">
+      <div className="grid lg:grid-cols-[360px_1fr] gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Upload Import
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>Target type</Label>
+              <select className="w-full border rounded-md h-10 px-3 bg-white dark:bg-slate-950" value={targetType} onChange={(e) => setTargetType(e.target.value)}>
+                <option value="contacts">Contacts</option>
+                <option value="entities">Businesses</option>
+                <option value="places">Places / properties</option>
+              </select>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+            <Button variant="outline" className="w-full" onClick={downloadTemplate} disabled={!templateFields.data}>
+              <Download className="w-4 h-4 mr-1" /> Download {IMPORT_TARGET_LABELS[targetType]} template
+            </Button>
+            <Input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => e.target.files?.[0] && upload.mutate(e.target.files[0])} />
+            <p className="text-sm text-slate-500">Upload a CSV or Excel file, map its columns to CRM fields, validate, then commit. Imports can be tagged and rolled back as a batch.</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Import Batches</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(imports.data || []).map((batch) => (
+              <div key={batch.id} className="border rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <p className="font-medium">{batch.source_filename || batch.source_system}</p>
+                  <p className="text-sm text-slate-500">{IMPORT_TARGET_LABELS[batch.target_type] || batch.target_type} &middot; {batch.row_count} rows &middot; {batch.status}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant={activeBatchId === batch.id ? "default" : "outline"} onClick={() => setActiveBatchId(batch.id)}>
+                    {batch.status === "completed" ? "Review" : "Map & import"}
+                  </Button>
+                  {batch.status === "completed" ? (
+                    <Button variant="outline" onClick={() => rollback.mutate(batch.id)}>Roll back</Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+            {!(imports.data || []).length ? <p className="text-sm text-slate-500">No imports yet. Upload a file to get started.</p> : null}
+          </CardContent>
+        </Card>
+      </div>
+      {activeBatch ? <ImportMappingPanel key={activeBatch.id} batch={activeBatch} onClose={() => setActiveBatchId(null)} /> : null}
     </div>
   );
 }
@@ -1639,6 +2520,181 @@ function AudiencesSection() {
   );
 }
 
+const GRAPH_TYPE_PATH = { contact: "contacts", entity: "entities", place: "places" };
+const GRAPH_TYPE_COLOR = { contact: "#2d4650", entity: "#835879", place: "#1d4ed8" };
+
+function truncateLabel(text, max = 16) {
+  if (!text) return "";
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function RelationshipGraph({ type, id }) {
+  const navigate = useNavigate();
+  const plural = GRAPH_TYPE_PATH[type];
+  const graph = useQuery({
+    queryKey: ["crm", type, id, "graph"],
+    queryFn: () => apiFetch(`/crm/${plural}/${id}/graph`),
+  });
+  const data = graph.data;
+  const layout = useMemo(() => {
+    if (!data || !data.nodes?.length) return null;
+    const W = 640;
+    const H = 440;
+    const cx = W / 2;
+    const cy = H / 2;
+    const others = data.nodes.filter((n) => `${n.type}:${n.id}` !== data.center);
+    const R = Math.min(180, 110 + others.length * 6);
+    const pos = new Map();
+    pos.set(data.center, { x: cx, y: cy });
+    others.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / Math.max(others.length, 1) - Math.PI / 2;
+      pos.set(`${n.type}:${n.id}`, { x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle) });
+    });
+    return { W, H, pos, others };
+  }, [data]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Network className="w-5 h-5" />
+          Relationship Map
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {graph.isLoading ? (
+          <p className="text-sm text-slate-500">Building relationship map…</p>
+        ) : !layout || !layout.others.length ? (
+          <p className="text-sm text-slate-500">No connected records yet. Add relationships to see the map.</p>
+        ) : (
+          <>
+            <svg viewBox={`0 0 ${layout.W} ${layout.H}`} className="w-full h-auto" role="img">
+              {data.edges.map((edge) => {
+                const s = layout.pos.get(edge.source);
+                const t = layout.pos.get(edge.target);
+                if (!s || !t) return null;
+                return <line key={edge.id} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="#cbd5e1" strokeWidth={1.5} />;
+              })}
+              {data.nodes.map((node) => {
+                const key = `${node.type}:${node.id}`;
+                const p = layout.pos.get(key);
+                if (!p) return null;
+                const isCenter = key === data.center;
+                const color = GRAPH_TYPE_COLOR[node.type] || "#475569";
+                return (
+                  <g
+                    key={key}
+                    transform={`translate(${p.x}, ${p.y})`}
+                    style={{ cursor: isCenter ? "default" : "pointer" }}
+                    onClick={() => {
+                      if (!isCenter) navigate(`/crm/${GRAPH_TYPE_PATH[node.type]}/${node.id}`);
+                    }}
+                  >
+                    <circle r={isCenter ? 30 : 22} fill={color} opacity={isCenter ? 1 : 0.85} />
+                    <text textAnchor="middle" dy={isCenter ? 46 : 38} fontSize="11" fill="#334155">
+                      {truncateLabel(node.label)}
+                    </text>
+                    {node.sublabel ? (
+                      <text textAnchor="middle" dy={isCenter ? 58 : 50} fontSize="9" fill="#94a3b8">
+                        {truncateLabel(node.sublabel, 20)}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-2">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full inline-block" style={{ background: GRAPH_TYPE_COLOR.contact }} /> Person</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full inline-block" style={{ background: GRAPH_TYPE_COLOR.entity }} /> Business</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full inline-block" style={{ background: GRAPH_TYPE_COLOR.place }} /> Place</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlaceProfileMap({ place }) {
+  const districts = useQuery({
+    queryKey: ["crm", "districts"],
+    queryFn: () => apiFetch("/crm/districts"),
+  });
+  const lat = Number(place.lat);
+  const lng = Number(place.lng);
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+  const district = (districts.data || []).find((d) => d.id === place.district_id);
+  const overlays = useMemo(() => buildDistrictOverlays(district ? [district] : []), [district]);
+  if (!hasCoords && !overlays.length) {
+    return (
+      <div className="mt-4 rounded-xl border bg-slate-100 p-6 text-center text-slate-500">
+        <MapPin className="w-8 h-8 mx-auto mb-2" />
+        Add an address (for coordinates) or assign a district with a boundary to see this place on the map.
+      </div>
+    );
+  }
+  const stops = hasCoords
+    ? [{
+        id: place.id,
+        name: place.place_name || place.line1 || "Place",
+        address_text: [place.line1, place.city, place.state].filter(Boolean).join(", "),
+        lat,
+        lng,
+      }]
+    : [];
+  return (
+    <div className="mt-4">
+      <PassportMap stops={stops} stamps={[]} mapConfig={{}} showControls={false} heightClass="h-[280px]" overlays={overlays} />
+      {district ? <p className="text-xs text-slate-500 mt-2">District: {district.name}</p> : null}
+    </div>
+  );
+}
+
+function ProfileTasksCard({ type, id }) {
+  const queryClient = useQueryClient();
+  const plural = type === "contact" ? "contacts" : type === "entity" ? "entities" : "places";
+  const tasks = useQuery({
+    queryKey: ["crm", type, id, "tasks"],
+    queryFn: () => apiFetch(`/crm/${plural}/${id}/tasks`),
+  });
+  const complete = useMutation({
+    mutationFn: (taskId) =>
+      apiFetch(`/tasks/${taskId}/status`, { method: "PATCH", body: JSON.stringify({ status: "completed" }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm", type, id] });
+      toast.success("Task completed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const openTasks = (tasks.data || []).filter((task) => task.status !== "completed" && task.status !== "cancelled");
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="w-5 h-5" />
+          Tasks & Reminders
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {openTasks.map((task) => (
+          <div key={task.id} className="flex items-start justify-between gap-2 border rounded-lg p-3">
+            <div className="min-w-0">
+              <p className="font-medium">{task.title}</p>
+              <p className="text-xs text-slate-500">
+                {[task.due_date ? `Due ${formatCrmDate(task.due_date)}` : "No due date", task.assigned_to_name].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" disabled={complete.isPending} onClick={() => complete.mutate(task.id)}>
+              Done
+            </Button>
+          </div>
+        ))}
+        {!openTasks.length ? <p className="text-sm text-slate-500">No open tasks. Use a touchpoint reminder to add one.</p> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ProfileShell({ type, id }) {
   const endpoint = type === "contact" ? `/crm/contacts/${id}` : type === "entity" ? `/crm/entities/${id}` : `/crm/places/${id}`;
   const [profileTouchpoint, setProfileTouchpoint] = useState(null);
@@ -1681,6 +2737,10 @@ function ProfileShell({ type, id }) {
                 <CardTitle>Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <span className="text-slate-500">Owner</span>
+                  <OwnerPicker recordType={type} id={id} ownerUserId={detail.data.owner_user_id} />
+                </div>
                 {type === "contact" ? (
                   <>
                     <p>Email: {detail.data.emails?.[0]?.email || "None"}</p>
@@ -1701,16 +2761,15 @@ function ProfileShell({ type, id }) {
                     <p>Address: {[detail.data.line1, detail.data.city, detail.data.state, detail.data.postal_code].filter(Boolean).join(", ") || "None"}</p>
                     <p>Occupancy: {detail.data.occupancy_status || "Unknown"}</p>
                     <p>Use type: {detail.data.use_type || "Unknown"}</p>
-                    <div className="mt-4 rounded-xl border bg-slate-100 p-6 text-center text-slate-500">
-                      <MapPin className="w-8 h-8 mx-auto mb-2" />
-                      GIS map placeholder. Parcel geometry, district overlays, and canvassing layers can attach here.
-                    </div>
+                    <PlaceProfileMap place={detail.data} />
                   </>
                 ) : null}
                 {detail.data.notes ? <p className="pt-2 whitespace-pre-wrap">{detail.data.notes}</p> : null}
               </CardContent>
             </Card>
             <RelatedRecordsCard type={type} detail={detail.data} />
+            <RelationshipGraph type={type} id={id} />
+            <ProfileTasksCard type={type} id={id} />
             <Card>
               <CardHeader>
                 <CardTitle>Timeline</CardTitle>
@@ -1822,6 +2881,8 @@ export default function CRM() {
         {active === "contacts" ? <ContactsSection /> : null}
         {active === "entities" ? <EntitiesSection /> : null}
         {active === "places" ? <PlacesSection /> : null}
+        {active === "districts" ? <DistrictsSection /> : null}
+        {active === "reports" ? <ReportsSection /> : null}
         {active === "touchpoints" ? <ActivitySection /> : null}
         {active === "imports" ? <ImportsSection /> : null}
         {active === "duplicates" ? <DuplicatesSection /> : null}

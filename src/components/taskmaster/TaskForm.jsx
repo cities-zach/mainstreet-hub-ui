@@ -14,9 +14,19 @@ import {
   CommandItem,
   CommandList
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Trash2, Search, X } from "lucide-react";
 import { apiFetch } from "@/api";
 import { cn } from "@/lib/utils";
+
+const CRM_LINK_TYPES = [
+  { id: "contact", label: "Person", path: "/crm/contacts" },
+  { id: "entity", label: "Business", path: "/crm/entities" },
+  { id: "place", label: "Place", path: "/crm/places" },
+];
+
+function crmRecordLabel(record) {
+  return record.display_name || record.name || record.place_name || record.line1 || "Unnamed record";
+}
 
 export default function TaskForm({ onSuccess, onCancel, currentUser, task = null }) {
   const queryClient = useQueryClient();
@@ -32,6 +42,16 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
   });
   const [newStepTitle, setNewStepTitle] = useState("");
   const [steps, setSteps] = useState([]);
+  const [crmType, setCrmType] = useState("contact");
+  const [crmQuery, setCrmQuery] = useState("");
+  const [crmLink, setCrmLink] = useState(null);
+
+  const crmSearchPath = CRM_LINK_TYPES.find((t) => t.id === crmType)?.path || "/crm/contacts";
+  const { data: crmResults = [] } = useQuery({
+    queryKey: ["task-crm-picker", crmType, crmQuery],
+    queryFn: () => apiFetch(`${crmSearchPath}?query=${encodeURIComponent(crmQuery)}`),
+    enabled: crmQuery.trim().length > 1,
+  });
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
@@ -62,6 +82,8 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
       });
       setSteps([]);
       setNewStepTitle("");
+      setCrmLink(null);
+      setCrmQuery("");
     }
   });
 
@@ -91,7 +113,10 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
       event_id: formData.event_id || null,
       assigned_to_id: formData.assigned_to_id || null,
       assigned_by_id: currentUser?.id || null,
-      is_private: !!formData.is_private
+      is_private: !!formData.is_private,
+      crm_contact_id: crmLink?.type === "contact" ? crmLink.id : undefined,
+      crm_entity_id: crmLink?.type === "entity" ? crmLink.id : undefined,
+      crm_place_id: crmLink?.type === "place" ? crmLink.id : undefined,
     };
     if (isEdit) {
       updateMutation.mutate(payload);
@@ -231,6 +256,72 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
             </option>
           ))}
         </select>
+      </div>
+      <div className="space-y-2">
+        <Label>Link a CRM record (optional)</Label>
+        {isEdit && Array.isArray(task?.crm_links) && task.crm_links.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {task.crm_links.map((link) => (
+              <span key={link.id} className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">
+                {link.contact_name || link.entity_name || link.place_name || "Linked record"}
+              </span>
+            ))}
+          </div>
+        )}
+        {crmLink ? (
+          <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+            <span className="font-medium">{crmLink.label}</span>
+            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCrmLink(null)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2 rounded-md border p-2">
+            <div className="flex gap-2">
+              {CRM_LINK_TYPES.map((t) => (
+                <Button
+                  key={t.id}
+                  type="button"
+                  size="sm"
+                  variant={crmType === t.id ? "default" : "outline"}
+                  onClick={() => {
+                    setCrmType(t.id);
+                    setCrmQuery("");
+                  }}
+                >
+                  {t.label}
+                </Button>
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                className="pl-9"
+                placeholder={`Search ${CRM_LINK_TYPES.find((t) => t.id === crmType)?.label.toLowerCase()}…`}
+                value={crmQuery}
+                onChange={(e) => setCrmQuery(e.target.value)}
+              />
+            </div>
+            {crmQuery.trim().length > 1 && (
+              <div className="max-h-40 overflow-auto rounded-md border divide-y">
+                {crmResults.map((record) => (
+                  <button
+                    key={record.id}
+                    type="button"
+                    className="w-full text-left p-2 text-sm hover:bg-slate-50"
+                    onClick={() => {
+                      setCrmLink({ type: crmType, id: record.id, label: crmRecordLabel(record) });
+                      setCrmQuery("");
+                    }}
+                  >
+                    {crmRecordLabel(record)}
+                  </button>
+                ))}
+                {crmResults.length === 0 && <p className="p-2 text-xs text-slate-500">No matches.</p>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {!isEdit && (
         <div className="space-y-2">

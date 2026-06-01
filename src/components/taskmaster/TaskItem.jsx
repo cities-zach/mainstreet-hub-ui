@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CheckCircle, Circle, ListChecks, Pencil, Trash2 } from "lucide-react";
+import { Link as RouterLink } from "react-router-dom";
+import { CheckCircle, Circle, ListChecks, Pencil, Trash2, Link2 } from "lucide-react";
 import { differenceInCalendarDays, endOfDay, format, isBefore, parseISO } from "date-fns";
 import { apiFetch } from "@/api";
 import { toast } from "sonner";
@@ -50,6 +51,15 @@ export default function TaskItem({
   const updatedAt = task.updated_at ? parseISO(task.updated_at) : null;
   const stepTotal = Number(task.step_count || 0);
   const stepCompleted = Number(task.step_completed_count || 0);
+  const crmLinks = Array.isArray(task.crm_links) ? task.crm_links : [];
+  const crmLinkPath = (link) =>
+    link.contact_id
+      ? `/crm/contacts/${link.contact_id}`
+      : link.entity_id
+        ? `/crm/entities/${link.entity_id}`
+        : link.place_id
+          ? `/crm/places/${link.place_id}`
+          : null;
 
   useEffect(() => {
     if (!stepsOpen) return;
@@ -177,6 +187,27 @@ export default function TaskItem({
               <p className="text-xs text-slate-400">
                 Updated: {format(updatedAt, "MMM d, yyyy")}
               </p>
+            )}
+            {crmLinks.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {crmLinks.map((link) => {
+                  const label = link.contact_name || link.entity_name || link.place_name || "Linked record";
+                  const path = crmLinkPath(link);
+                  const chip = (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#835879]/10 px-2 py-0.5 text-xs text-[#835879]">
+                      <Link2 className="w-3 h-3" />
+                      {label}
+                    </span>
+                  );
+                  return path ? (
+                    <RouterLink key={link.id} to={path} className="hover:opacity-80">
+                      {chip}
+                    </RouterLink>
+                  ) : (
+                    <span key={link.id}>{chip}</span>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

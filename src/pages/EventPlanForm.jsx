@@ -299,6 +299,7 @@ export default function EventPlanForm() {
                         onChange={updateFormData}
                         readOnly={false}
                         validationErrors={validationErrors}
+                        eventId={eventId}
                       />
                     </div>
                   );
