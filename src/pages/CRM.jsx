@@ -18,6 +18,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Star,
   Tags,
   Trash2,
@@ -2433,6 +2434,17 @@ function ImportMappingPanel({ batch, onClose }) {
     onError: (error) => toast.error(error.message),
   });
 
+  const aiMap = useMutation({
+    mutationFn: () => apiFetch(`/crm/imports/${batch.id}/ai-map`, { method: "POST" }),
+    onSuccess: (result) => {
+      const suggested = result?.mapping || {};
+      setOverrides((prev) => ({ ...prev, ...suggested }));
+      const matched = Object.values(suggested).filter((value) => value && value !== "ignore").length;
+      toast.success(matched ? `AI matched ${matched} column(s)` : "AI couldn't confidently match any columns");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const runMapThenValidate = async () => {
     await saveMapping.mutateAsync();
     await validate.mutateAsync();
@@ -2471,6 +2483,17 @@ function ImportMappingPanel({ batch, onClose }) {
       </CardHeader>
       <CardContent className="space-y-5">
         {preview.isLoading ? <p className="text-sm text-slate-500">Loading preview...</p> : null}
+        {headers.length ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">
+              We pre-match columns automatically. Use AI to match unusual or differently named columns, then review below.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => aiMap.mutate()} disabled={aiMap.isPending}>
+              <Sparkles className="w-4 h-4 mr-1" />
+              {aiMap.isPending ? "Matching..." : "Auto-map with AI"}
+            </Button>
+          </div>
+        ) : null}
         {headers.length ? (
           <div className="overflow-auto rounded-xl border">
             <table className="w-full text-sm">
