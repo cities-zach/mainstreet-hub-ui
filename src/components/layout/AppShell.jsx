@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bot,
   ClipboardList,
@@ -26,8 +26,10 @@ import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import NotificationsBell from "@/components/notifications/NotificationsBell";
+import ErrorBoundary from "@/components/system/ErrorBoundary";
 
 export default function AppShell({ me }) {
+  const location = useLocation();
   const isAdmin =
     me?.user?.role === "admin" ||
     me?.user?.role === "super_admin" ||
@@ -201,7 +203,9 @@ export default function AppShell({ me }) {
         </aside>
 
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <ErrorBoundary resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
 
         {chatOpen && (

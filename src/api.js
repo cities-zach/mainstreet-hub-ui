@@ -56,6 +56,14 @@ export async function apiFetch(path, options = {}) {
 // Domain helpers
 // ----------------------
 
+// Sends a front-end crash report to the backend (best-effort).
+export function sendClientErrorReport(payload) {
+  return apiFetch("/client-error-reports", {
+    method: "POST",
+    body: JSON.stringify(payload || {})
+  });
+}
+
 export function getEvents() {
   return apiFetch("/events");
 }

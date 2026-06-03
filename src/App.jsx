@@ -54,6 +54,7 @@ import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
 import AiSessions from "@/pages/AiSessions";
 import AppShell from "@/components/layout/AppShell";
+import ErrorBoundary from "@/components/system/ErrorBoundary";
 import PolicyAcceptanceModal from "@/components/policies/PolicyAcceptanceModal";
 import NamePromptModal from "@/components/users/NamePromptModal";
 import Login from "@/pages/Login";
@@ -281,8 +282,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppInner />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AppInner />
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

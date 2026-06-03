@@ -114,7 +114,7 @@ function CrmContactPicker({ onPick, onClose, disabled }) {
           </div>
           {query.trim().length > 1 ? (
             <div className="max-h-40 overflow-auto rounded-lg border divide-y">
-              {(results.data || []).map((record) => (
+              {(results.data?.rows || []).map((record) => (
                 <button
                   key={record.id}
                   type="button"
@@ -126,7 +126,7 @@ function CrmContactPicker({ onPick, onClose, disabled }) {
                   <p className="text-xs text-slate-500">{[record.primary_email, record.general_email, record.entity_type, record.category].filter(Boolean).join(" · ")}</p>
                 </button>
               ))}
-              {!(results.data || []).length ? <p className="p-2 text-xs text-slate-500">No matches.</p> : null}
+              {!(results.data?.rows || []).length ? <p className="p-2 text-xs text-slate-500">No matches.</p> : null}
             </div>
           ) : null}
           <Button type="button" size="sm" variant="outline" onClick={() => setCreating(true)}>
