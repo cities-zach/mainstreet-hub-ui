@@ -2373,7 +2373,7 @@ function ActivityComposer() {
               <SearchBox value={query} onChange={setQuery} placeholder={config.placeholder} />
               {query.trim().length > 1 ? (
                 <div className="max-h-40 overflow-auto rounded-xl border divide-y">
-                  {(results.data || []).map((record) => (
+                  {(results.data?.rows || []).map((record) => (
                     <button
                       key={record.id}
                       type="button"
@@ -2387,7 +2387,7 @@ function ActivityComposer() {
                       <p className="text-xs text-slate-500">{getRecordSubLabel(record)}</p>
                     </button>
                   ))}
-                  {!(results.data || []).length ? <p className="p-2 text-xs text-slate-500">No matches.</p> : null}
+                  {!(results.data?.rows || []).length ? <p className="p-2 text-xs text-slate-500">No matches.</p> : null}
                 </div>
               ) : null}
             </div>
