@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Image, MapPin } from "lucide-react";
+import { ExternalLink, Image, MapPin, Search, X } from "lucide-react";
 import { apiFetch } from "@/api";
 import InteractiveTourMap from "@/components/maps/InteractiveTourMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 function directionsUrl(stop) {
   if (!stop?.lat || !stop?.lng) return "";
@@ -55,6 +56,7 @@ function StopDetailsCard({ stop, className = "" }) {
 export default function WalkingTourPublic() {
   const { slug } = useParams();
   const [selectedStopId, setSelectedStopId] = useState(null);
+  const [search, setSearch] = useState("");
   const tourQuery = useQuery({
     queryKey: ["public-walking-tour", slug],
     queryFn: () => apiFetch(`/tours/${slug}`),
@@ -65,6 +67,38 @@ export default function WalkingTourPublic() {
   const tour = tourQuery.data?.tour;
   const stops = useMemo(() => tourQuery.data?.stops || [], [tourQuery.data?.stops]);
   const selectedStop = stops.find((stop) => stop.id === selectedStopId) || null;
+  const searchEnabled = Boolean(tour?.search_enabled);
+
+  // Keep each stop's number tied to its real position in the tour.
+  const numberedStops = useMemo(
+    () => stops.map((stop, index) => ({ ...stop, displayNumber: index + 1 })),
+    [stops]
+  );
+
+  const filteredStops = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return numberedStops;
+    return numberedStops.filter(
+      (stop) =>
+        (stop.label || "").toLowerCase().includes(query) ||
+        (stop.address_text || "").toLowerCase().includes(query)
+    );
+  }, [numberedStops, search]);
+
+  // Pull the selected stop to the top so it's easy to find on mobile.
+  const orderedStops = useMemo(() => {
+    if (!selectedStopId) return filteredStops;
+    const selectedIndex = filteredStops.findIndex((stop) => stop.id === selectedStopId);
+    if (selectedIndex <= 0) return filteredStops;
+    const next = [...filteredStops];
+    const [picked] = next.splice(selectedIndex, 1);
+    return [picked, ...next];
+  }, [filteredStops, selectedStopId]);
+
+  const handleSelectStop = (id) => {
+    setSelectedStopId(id);
+    setSearch("");
+  };
 
   if (tourQuery.isLoading) {
     return (
@@ -115,26 +149,47 @@ export default function WalkingTourPublic() {
             mode="public"
             mapConfig={tour.map_config || {}}
             selectedStopId={selectedStop?.id}
-            onSelectStop={(stop) => setSelectedStopId(stop.id)}
+            onSelectStop={(stop) => handleSelectStop(stop.id)}
             heightClass="h-[520px]"
           />
+          {searchEnabled && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className="pl-9 pr-9"
+                placeholder="Search stops by name..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Tour Stops</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {stops.map((stop, index) => (
+              {orderedStops.map((stop) => (
                 <div key={stop.id} className="space-y-2">
                   <button
                     type="button"
                     className={`w-full rounded-xl border p-3 text-left transition ${
                       selectedStop?.id === stop.id ? "border-[#835879] bg-[#835879]/5" : "bg-white hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900"
                     }`}
-                    onClick={() => setSelectedStopId(stop.id)}
+                    onClick={() => handleSelectStop(stop.id)}
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#835879]/10 text-sm font-semibold text-[#835879]">
-                        {index + 1}
+                        {stop.displayNumber}
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium">{stop.label}</p>
@@ -147,6 +202,9 @@ export default function WalkingTourPublic() {
                   )}
                 </div>
               ))}
+              {searchEnabled && search.trim() && !orderedStops.length && (
+                <p className="px-1 py-2 text-sm text-slate-500">No stops match &ldquo;{search.trim()}&rdquo;.</p>
+              )}
             </CardContent>
           </Card>
         </section>

@@ -18,6 +18,7 @@ const emptyTour = {
   title: "",
   description: "",
   banner_url: "",
+  search_enabled: false,
 };
 
 const emptyStop = {
@@ -271,6 +272,7 @@ export default function WalkingTours() {
     title: selected?.title || "",
     description: selected?.description || "",
     banner_url: selected?.banner_url || "",
+    search_enabled: selected?.search_enabled === true,
   });
 
   const handleStopSubmit = (event) => {
@@ -476,6 +478,30 @@ export default function WalkingTours() {
                           placeholder="https://..."
                         />
                       </Field>
+                      <label className="flex items-start gap-2 rounded-xl border bg-slate-50 p-3 text-sm dark:bg-slate-900">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 accent-[#835879]"
+                          checked={selectedTourId ? tour?.search_enabled === true : tourForm.search_enabled}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            if (selectedTourId) {
+                              queryClient.setQueryData(["walking-tours", selectedTourId], {
+                                ...tour,
+                                search_enabled: checked,
+                              });
+                            } else {
+                              setTourForm((current) => ({ ...current, search_enabled: checked }));
+                            }
+                          }}
+                        />
+                        <span>
+                          <span className="font-medium text-[#2d4650] dark:text-slate-100">Enable stop search on public page</span>
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            Adds a search bar above the stop list so visitors can quickly find a stop by name. Helpful for tours with many stops.
+                          </span>
+                        </span>
+                      </label>
                       <div className="flex flex-wrap gap-2">
                         <Button type="button" variant="outline" disabled={uploading.banner} onClick={() => document.getElementById("walking-tour-banner-upload")?.click()}>
                           <Upload className="h-4 w-4" />
