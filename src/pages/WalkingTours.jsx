@@ -56,7 +56,7 @@ export default function WalkingTours() {
   const [tourForm, setTourForm] = useState(emptyTour);
   const [stopForm, setStopForm] = useState(emptyStop);
   const [editingStopId, setEditingStopId] = useState(null);
-  const [pinsLocked, setPinsLocked] = useState(false);
+  const [pinsLocked, setPinsLocked] = useState(true);
   const [uploading, setUploading] = useState({ banner: false, stop: false });
 
   const tours = useQuery({
@@ -393,6 +393,7 @@ export default function WalkingTours() {
                   setSelectedTourId(item.id);
                   setTourForm(emptyTour);
                   resetStopForm();
+                  setPinsLocked(true);
                 }}
               >
                 <div className="flex items-start justify-between gap-2">
