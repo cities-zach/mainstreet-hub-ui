@@ -27,6 +27,7 @@ export default function InteractiveTourMap({
   const markersRef = useRef([]);
   const userMarkerRef = useRef(null);
   const [locationError, setLocationError] = useState(null);
+  const [mapError, setMapError] = useState(false);
 
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
   const mappableStops = useMemo(() => stops.filter(isMappable), [stops]);
@@ -41,12 +42,21 @@ export default function InteractiveTourMap({
   useEffect(() => {
     if (!mapboxToken || !mapContainerRef.current || mapRef.current) return;
     mapboxgl.accessToken = mapboxToken;
-    mapRef.current = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: mapStyle,
-      center: mapCenter,
-      zoom: mapZoom,
-    });
+    try {
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: mapStyle,
+        center: mapCenter,
+        zoom: mapZoom,
+      });
+      map.on("error", () => {});
+      mapRef.current = map;
+    } catch (error) {
+      // Some browsers/bots have no WebGL support; degrade gracefully instead
+      // of crashing the whole page.
+      console.warn("Map could not be initialized:", error);
+      setMapError(true);
+    }
   }, [mapCenter, mapStyle, mapZoom, mapboxToken]);
 
   useEffect(() => {
@@ -138,6 +148,17 @@ export default function InteractiveTourMap({
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
         Mapbox token not configured. Add `VITE_MAPBOX_TOKEN` to enable the map.
+      </div>
+    );
+  }
+
+  if (mapError) {
+    return (
+      <div className={`${heightClass} flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400`}>
+        <p>
+          The interactive map can&apos;t be displayed on this device or browser.
+          {mode === "public" ? " You can still browse the stops in the list below." : ""}
+        </p>
       </div>
     );
   }

@@ -1,6 +1,14 @@
 import React from "react";
 import { sendClientErrorReport } from "@/api";
 
+const BOT_UA_PATTERN =
+  /bot|crawl|spider|slurp|bingpreview|duckassist|facebookexternalhit|embedly|quora|pinterest|headless|lighthouse|preview|scanner/i;
+
+function isLikelyBot() {
+  if (typeof navigator === "undefined") return false;
+  return BOT_UA_PATTERN.test(navigator.userAgent || "");
+}
+
 /**
  * Catches render-time crashes anywhere in its child tree and shows a friendly
  * recovery screen instead of a blank white page.
@@ -73,6 +81,9 @@ export default class ErrorBoundary extends React.Component {
   }
 
   submitReport = async ({ silent = false } = {}) => {
+    // Crawlers (which only ever trigger the automatic report) generate noise
+    // and often fail on things like WebGL; skip auto-reports from bots.
+    if (silent && isLikelyBot()) return;
     if (!silent) this.setState({ reportStatus: "sending" });
     try {
       const res = await sendClientErrorReport(this.buildPayload());

@@ -21,6 +21,7 @@ export default function PassportMap({
   const userMarkerRef = useRef(null);
   const overlayIdsRef = useRef([]);
   const [locationError, setLocationError] = useState(null);
+  const [mapError, setMapError] = useState(false);
 
   const visitedStopIds = useMemo(
     () => new Set(stamps.map((stamp) => stamp.stop_id)),
@@ -42,12 +43,20 @@ export default function PassportMap({
   useEffect(() => {
     if (!mapboxToken || !mapContainerRef.current || mapRef.current) return;
     mapboxgl.accessToken = mapboxToken;
-    mapRef.current = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: mapStyle,
-      center: mapCenter,
-      zoom: mapZoom
-    });
+    try {
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: mapStyle,
+        center: mapCenter,
+        zoom: mapZoom
+      });
+      map.on("error", () => {});
+      mapRef.current = map;
+    } catch (error) {
+      // Some browsers/bots have no WebGL support; degrade gracefully.
+      console.warn("Map could not be initialized:", error);
+      setMapError(true);
+    }
   }, [mapboxToken, mapStyle, mapCenter, mapZoom]);
 
   useEffect(() => {
@@ -151,6 +160,14 @@ export default function PassportMap({
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
         Mapbox token not configured. Add `VITE_MAPBOX_TOKEN` to enable the map.
+      </div>
+    );
+  }
+
+  if (mapError) {
+    return (
+      <div className={`${heightClass} flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500`}>
+        <p>The interactive map can&apos;t be displayed on this device or browser.</p>
       </div>
     );
   }
