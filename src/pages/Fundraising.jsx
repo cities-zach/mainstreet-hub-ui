@@ -308,6 +308,7 @@ export default function Fundraising() {
                         <Upload className="h-4 w-4" />
                         {uploading ? "Uploading..." : "Upload photo"}
                       </Button>
+                      <p className="text-xs text-slate-500">Ideal Size: 1600 x 900 px</p>
                       <input id="fundraising-photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                     </div>
                   </div>

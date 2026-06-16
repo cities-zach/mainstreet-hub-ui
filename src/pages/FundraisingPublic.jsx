@@ -22,7 +22,7 @@ export default function FundraisingPublic() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const [form, setForm] = useState({
-    amount: "25",
+    amount: "",
     first_name: "",
     last_name: "",
     email: "",
@@ -52,13 +52,11 @@ export default function FundraisingPublic() {
   const campaign = data?.campaign;
   const percent = Math.min(100, data?.percent || 0);
   const activeGoal = data?.active_goal;
-  const goals = useMemo(() => {
-    if (!campaign) return [];
-    return [
-      { id: "primary", label: "Primary goal", amount_cents: campaign.primary_goal_cents },
-      ...(campaign.goals || []),
-    ].sort((a, b) => a.amount_cents - b.amount_cents);
-  }, [campaign]);
+  const primaryGoalMet = Number(data?.paid_total_cents || 0) >= Number(campaign?.primary_goal_cents || 0);
+  const showingStretchGoal = primaryGoalMet && activeGoal?.amount_cents > campaign?.primary_goal_cents;
+  const primaryMarkerPercent = showingStretchGoal
+    ? Math.min(100, (Number(campaign.primary_goal_cents || 0) / Number(activeGoal.amount_cents || 1)) * 100)
+    : 100;
 
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
   const submit = (event) => {
@@ -85,13 +83,15 @@ export default function FundraisingPublic() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-white">
       <header className="bg-white shadow-sm dark:bg-slate-900">
-        {campaign.photo_url ? (
-          <img src={campaign.photo_url} alt="" className="h-64 w-full object-cover md:h-80" />
-        ) : (
-          <div className="flex h-56 w-full items-center justify-center bg-slate-100 text-slate-400 dark:bg-slate-800">
-            <Image className="h-10 w-10" />
-          </div>
-        )}
+        <div className="mx-auto max-w-5xl px-4 pt-6">
+          {campaign.photo_url ? (
+            <img src={campaign.photo_url} alt="" className="aspect-video w-full rounded-2xl object-cover shadow-sm" />
+          ) : (
+            <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+              <Image className="h-10 w-10" />
+            </div>
+          )}
+        </div>
         <div className="mx-auto max-w-5xl px-4 py-8">
           <div className="inline-flex items-center gap-2 rounded-full bg-[#835879]/10 px-3 py-1 text-sm font-medium text-[#835879]">
             <Heart className="h-4 w-4" />
@@ -117,22 +117,28 @@ export default function FundraisingPublic() {
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <p className="text-3xl font-bold text-[#835879]">{money(data.paid_total_cents, campaign.currency)}</p>
-                  <p className="text-sm text-slate-500">raised toward {money(activeGoal?.amount_cents, campaign.currency)}</p>
+                  <p className="text-sm text-slate-500">
+                    {showingStretchGoal
+                      ? `primary goal met; now raising toward ${money(activeGoal?.amount_cents, campaign.currency)}`
+                      : `raised toward ${money(campaign.primary_goal_cents, campaign.currency)}`}
+                  </p>
                 </div>
                 <p className="text-sm font-medium text-slate-500">{percent}%</p>
               </div>
-              <div className="h-4 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="relative h-4 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 <div className="h-full rounded-full bg-[#835879]" style={{ width: `${percent}%` }} />
+                {showingStretchGoal && (
+                  <div
+                    className="absolute top-0 h-full w-0.5 bg-white shadow-sm"
+                    style={{ left: `${primaryMarkerPercent}%` }}
+                    title={`Primary goal met at ${money(campaign.primary_goal_cents, campaign.currency)}`}
+                  />
+                )}
               </div>
-              {goals.length > 1 && (
-                <div className="grid gap-2 text-sm sm:grid-cols-2">
-                  {goals.map((goal) => (
-                    <div key={goal.id} className={`rounded-xl border p-3 ${activeGoal?.amount_cents === goal.amount_cents ? "border-[#835879] bg-[#835879]/5" : "bg-white dark:bg-slate-950"}`}>
-                      <p className="font-medium">{goal.label || "Stretch goal"}</p>
-                      <p className="text-slate-500">{money(goal.amount_cents, campaign.currency)}</p>
-                    </div>
-                  ))}
-                </div>
+              {showingStretchGoal && (
+                <p className="text-xs text-slate-500">
+                  Marker shows the primary goal at {money(campaign.primary_goal_cents, campaign.currency)}.
+                </p>
               )}
             </CardContent>
           </Card>
