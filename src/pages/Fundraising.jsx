@@ -19,6 +19,17 @@ const emptyForm = {
   goals: [],
 };
 
+const emptyOfflineDonation = {
+  amount: "",
+  first_name: "",
+  last_name: "",
+  email: "",
+  donor_message: "",
+  anonymous: false,
+  is_match_pledge: false,
+  match_message: "",
+};
+
 function centsToDollars(cents) {
   return (Number(cents || 0) / 100).toFixed(2);
 }
@@ -75,6 +86,7 @@ export default function Fundraising() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [offlineForm, setOfflineForm] = useState(emptyOfflineDonation);
   const [uploading, setUploading] = useState(false);
 
   const campaigns = useQuery({
@@ -150,6 +162,20 @@ export default function Fundraising() {
     onError: (error) => toast.error(error.message),
   });
 
+  const addOfflineDonation = useMutation({
+    mutationFn: (payload) =>
+      apiFetch(`/fundraising/campaigns/${selectedId}/offline-contributions`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      toast.success(offlineForm.is_match_pledge ? "Donor match added" : "Offline donation added");
+      setOfflineForm(emptyOfflineDonation);
+      invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const updateGoal = (index, patch) => {
     setForm((current) => ({
       ...current,
@@ -197,6 +223,14 @@ export default function Fundraising() {
         amount_cents: dollarsToCents(goal.amount),
         sort_order: index,
       })),
+    });
+  };
+
+  const handleOfflineSubmit = (event) => {
+    event.preventDefault();
+    addOfflineDonation.mutate({
+      ...offlineForm,
+      amount_cents: dollarsToCents(offlineForm.amount),
     });
   };
 
@@ -378,6 +412,109 @@ export default function Fundraising() {
             </CardContent>
           </Card>
 
+          {currentCampaign?.status === "launched" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Add Offline Donation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-3" onSubmit={handleOfflineSubmit}>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="space-y-1">
+                      <Label>Amount ($)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        value={offlineForm.amount}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, amount: event.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>First name</Label>
+                      <Input
+                        value={offlineForm.first_name}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, first_name: event.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Last name</Label>
+                      <Input
+                        value={offlineForm.last_name}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, last_name: event.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={offlineForm.email}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, email: event.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Donor message</Label>
+                    <Textarea
+                      value={offlineForm.donor_message}
+                      onChange={(event) => setOfflineForm((current) => ({ ...current, donor_message: event.target.value }))}
+                      placeholder="Optional public message unless anonymous is checked"
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="flex items-start gap-2 rounded-xl border bg-slate-50 p-3 text-sm dark:bg-slate-900">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 accent-[#835879]"
+                        checked={offlineForm.anonymous}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, anonymous: event.target.checked }))}
+                      />
+                      <span>
+                        <span className="font-medium">Anonymous donation</span>
+                        <span className="mt-0.5 block text-xs text-slate-500">Message stays in reports but will not display publicly.</span>
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2 rounded-xl border bg-slate-50 p-3 text-sm dark:bg-slate-900">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 accent-[#835879]"
+                        checked={offlineForm.is_match_pledge}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, is_match_pledge: event.target.checked }))}
+                      />
+                      <span>
+                        <span className="font-medium">Donor Match</span>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          Match pledges do not count upfront. They are applied as matching credit to later donations until the pool is used.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                  {offlineForm.is_match_pledge && (
+                    <div className="space-y-1">
+                      <Label>Match message</Label>
+                      <Textarea
+                        value={offlineForm.match_message}
+                        onChange={(event) => setOfflineForm((current) => ({ ...current, match_message: event.target.value }))}
+                        placeholder="The next $500 in donations will be matched thanks to..."
+                        required
+                      />
+                      <p className="text-xs text-slate-500">
+                        This banner displays publicly until the matching pool is fully used. Avoid adding offline donations during an active match unless they should consume the pool.
+                      </p>
+                    </div>
+                  )}
+                  <Button type="submit" className="bg-[#835879] text-white" disabled={addOfflineDonation.isPending}>
+                    {addOfflineDonation.isPending ? "Saving..." : offlineForm.is_match_pledge ? "Add donor match" : "Add offline donation"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
           {currentCampaign && (
             <Card>
               <CardHeader>
@@ -389,7 +526,9 @@ export default function Fundraising() {
                     <tr>
                       <th className="p-2">Donor</th>
                       <th className="p-2">Amount</th>
+                      <th className="p-2">Source</th>
                       <th className="p-2">Status</th>
+                      <th className="p-2">Matched</th>
                       <th className="p-2">Message</th>
                       <th className="p-2">Paid</th>
                     </tr>
@@ -402,8 +541,14 @@ export default function Fundraising() {
                           <p className="text-xs text-slate-500">{contribution.email}</p>
                         </td>
                         <td className="p-2">{formatMoney(contribution.amount_cents, contribution.currency)}</td>
+                        <td className="p-2">
+                          <Badge>{contribution.is_match_pledge ? "match pledge" : contribution.source || "stripe"}</Badge>
+                        </td>
                         <td className="p-2"><Badge>{contribution.status}</Badge></td>
-                        <td className="max-w-xs p-2 text-slate-600">{contribution.donor_message || "—"}{contribution.anonymous ? " (anonymous)" : ""}</td>
+                        <td className="p-2">{contribution.matched_amount_cents ? formatMoney(contribution.matched_amount_cents, contribution.currency) : "—"}</td>
+                        <td className="max-w-xs p-2 text-slate-600">
+                          {contribution.donor_message || contribution.match_message || "—"}{contribution.anonymous ? " (anonymous)" : ""}
+                        </td>
                         <td className="p-2 text-xs text-slate-500">{contribution.paid_at ? new Date(contribution.paid_at).toLocaleString() : "—"}</td>
                       </tr>
                     ))}

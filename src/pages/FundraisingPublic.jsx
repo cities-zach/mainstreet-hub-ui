@@ -109,6 +109,19 @@ export default function FundraisingPublic() {
               <CardContent className="p-4 text-sm">Thank you for your contribution. Progress updates after Stripe confirms the payment.</CardContent>
             </Card>
           )}
+          {data.active_match && (
+            <Card className="border-[#835879]/30 bg-[#835879]/10">
+              <CardContent className="space-y-2 p-4">
+                <p className="font-semibold text-[#835879]">Active donor match</p>
+                <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
+                  {data.active_match.match_message}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {money(data.active_match.remaining_cents, campaign.currency)} in matching funds remain.
+                </p>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Campaign Progress</CardTitle>
