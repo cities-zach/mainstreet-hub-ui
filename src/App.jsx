@@ -34,6 +34,8 @@ import CRM from "@/pages/CRM";
 import Outreach from "@/pages/Outreach";
 import WalkingTours from "@/pages/WalkingTours";
 import WalkingTourPublic from "@/pages/WalkingTourPublic";
+import Fundraising from "@/pages/Fundraising";
+import FundraisingPublic from "@/pages/FundraisingPublic";
 import InvestorTrack from "@/pages/InvestorTrack";
 import RAGTime from "@/pages/RAGTime";
 
@@ -145,6 +147,7 @@ function AppInner() {
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/p/:slug" element={<PassportPublic />} />
           <Route path="/tours/:slug" element={<WalkingTourPublic />} />
+          <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
           <Route path="/feedback/public" element={<PublicSurvey />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -179,6 +182,7 @@ function AppInner() {
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/p/:slug" element={<PassportPublic />} />
         <Route path="/tours/:slug" element={<WalkingTourPublic />} />
+        <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
         <Route path="/feedback/public" element={<PublicSurvey />} />
         <Route
           element={
@@ -236,6 +240,7 @@ function AppInner() {
           <Route path="/crm/touchpoints" element={<CRM />} />
           <Route path="/outreach" element={<Outreach />} />
           <Route path="/walking-tours" element={<WalkingTours />} />
+          <Route path="/fundraising" element={<Fundraising />} />
           <Route path="/investors" element={<InvestorTrack />} />
 
           {/* ---------- RAGTIME ---------- */}
