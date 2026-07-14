@@ -36,6 +36,8 @@ import WalkingTours from "@/pages/WalkingTours";
 import WalkingTourPublic from "@/pages/WalkingTourPublic";
 import Fundraising from "@/pages/Fundraising";
 import FundraisingPublic from "@/pages/FundraisingPublic";
+import Contests from "@/pages/Contests";
+import ContestPublic from "@/pages/ContestPublic";
 import InvestorTrack from "@/pages/InvestorTrack";
 import RAGTime from "@/pages/RAGTime";
 
@@ -148,6 +150,7 @@ function AppInner() {
           <Route path="/p/:slug" element={<PassportPublic />} />
           <Route path="/tours/:slug" element={<WalkingTourPublic />} />
           <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
+          <Route path="/contests/:slug" element={<ContestPublic />} />
           <Route path="/feedback/public" element={<PublicSurvey />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -183,6 +186,7 @@ function AppInner() {
         <Route path="/p/:slug" element={<PassportPublic />} />
         <Route path="/tours/:slug" element={<WalkingTourPublic />} />
         <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
+        <Route path="/contests/:slug" element={<ContestPublic />} />
         <Route path="/feedback/public" element={<PublicSurvey />} />
         <Route
           element={
@@ -241,6 +245,7 @@ function AppInner() {
           <Route path="/outreach" element={<Outreach />} />
           <Route path="/walking-tours" element={<WalkingTours />} />
           <Route path="/fundraising" element={<Fundraising />} />
+          <Route path="/contests" element={<Contests />} />
           <Route path="/investors" element={<InvestorTrack />} />
 
           {/* ---------- RAGTIME ---------- */}

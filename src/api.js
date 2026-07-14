@@ -321,6 +321,66 @@ export function exportPassportEntriesToWheelspin(passportId, data) {
   });
 }
 
+// ----------------------
+// Contests
+// ----------------------
+
+export function getContests() {
+  return apiFetch("/contests");
+}
+
+export function getContest(id) {
+  return apiFetch(`/contests/${id}`);
+}
+
+export function createContest(data) {
+  return apiFetch("/contests", {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function updateContest(id, data) {
+  return apiFetch(`/contests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function launchContest(id) {
+  return apiFetch(`/contests/${id}/launch`, { method: "POST" });
+}
+
+export function closeContest(id) {
+  return apiFetch(`/contests/${id}/close`, { method: "POST" });
+}
+
+export function deleteContest(id) {
+  return apiFetch(`/contests/${id}`, { method: "DELETE" });
+}
+
+export function getContestEntries(id) {
+  return apiFetch(`/contests/${id}/entries`);
+}
+
+export function exportContestToWheelspin(id, data) {
+  return apiFetch(`/contests/${id}/export-to-wheelspin`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function getPublicContest(slug) {
+  return apiFetch(`/contests/public/${slug}`);
+}
+
+export function submitContestEntry(slug, data) {
+  return apiFetch(`/contests/public/${slug}/entries`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  });
+}
+
 export function getPassportReport(passportId) {
   return apiFetch(`/passports/${passportId}/report`);
 }

@@ -49,6 +49,7 @@ export default function AppShell({ me }) {
     { label: "Outreach", to: "/outreach", icon: Route },
     { label: "Walking Tours", to: "/walking-tours", icon: MapPin },
     { label: "Fundraising", to: "/fundraising", icon: DollarSign },
+    { label: "Contests", to: "/contests", icon: Sparkles },
     { label: "InvestorTrack", to: "/investors", icon: LineChart },
     { label: "Chat", to: "/chat", icon: MessageSquare },
     { label: "Passport", to: "/passports", icon: MapPin },
