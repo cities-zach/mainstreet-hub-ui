@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import {
   closeContest,
   createContest,
@@ -106,6 +106,30 @@ function statusClass(status) {
   return "bg-amber-100 text-amber-700";
 }
 
+function csvEscape(value) {
+  if (value == null) return "";
+  const text = String(value);
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function formatEntryResponse(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value == null) return "";
+  return String(value);
+}
+
+function safeFileName(value) {
+  return (
+    (value || "contest")
+      .toString()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "contest"
+  );
+}
+
 export default function Contests() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -152,6 +176,7 @@ export default function Contests() {
     : "";
 
   const entries = useMemo(() => detail?.entries || [], [detail]);
+  const savedFields = useMemo(() => detail?.fields || [], [detail]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -287,6 +312,34 @@ export default function Contests() {
     setSelectedId("");
     setContest(EMPTY_CONTEST);
     setFields([]);
+  };
+
+  const downloadEntriesCsv = () => {
+    if (!entries.length) return;
+    const headers = [
+      "Name",
+      "Email",
+      "Submitted At",
+      "CRM Status",
+      ...savedFields.map((field) => field.label)
+    ];
+    const rows = entries.map((entry) => [
+      entry.display_name,
+      entry.email,
+      entry.submitted_at ? new Date(entry.submitted_at).toISOString() : "",
+      entry.crm_contact_id ? "Synced" : "Pending",
+      ...savedFields.map((field) => formatEntryResponse(entry.responses?.[field.id]))
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeFileName(contest.name)}-entries.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -584,8 +637,16 @@ export default function Contests() {
 
             {selectedId && (
               <Card className="bg-white/80 dark:bg-slate-900/80">
-                <CardHeader>
+                <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <CardTitle>Entries ({entries.length})</CardTitle>
+                  <Button
+                    variant="outline"
+                    onClick={downloadEntriesCsv}
+                    disabled={entries.length === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   {entries.length === 0 ? (
@@ -599,6 +660,11 @@ export default function Contests() {
                             <th className="py-2 pr-4">Email</th>
                             <th className="py-2 pr-4">Submitted</th>
                             <th className="py-2 pr-4">CRM</th>
+                            {savedFields.map((field) => (
+                              <th key={field.id} className="py-2 pr-4">
+                                {field.label}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
@@ -612,6 +678,11 @@ export default function Contests() {
                               <td className="py-2 pr-4">
                                 {entry.crm_contact_id ? "Synced" : "Pending"}
                               </td>
+                              {savedFields.map((field) => (
+                                <td key={field.id} className="py-2 pr-4">
+                                  {formatEntryResponse(entry.responses?.[field.id]) || "-"}
+                                </td>
+                              ))}
                             </tr>
                           ))}
                         </tbody>
