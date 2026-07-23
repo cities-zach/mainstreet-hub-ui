@@ -64,7 +64,7 @@ export default function AppShell({ me }) {
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const organization = me?.organization;
   const orgName = organization?.name || "MainStreet";
