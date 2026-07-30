@@ -1,6 +1,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -136,11 +137,11 @@ export default function VolunteersSection({ data, onChange, readOnly }) {
                       disabled={readOnly}
                     />
 
-                    <Input
+                    <TemporalInput
                       type="date"
                       value={opp.date}
-                      onChange={(e) =>
-                        updateOpportunity(index, "date", e.target.value)
+                      onValueChange={(value) =>
+                        updateOpportunity(index, "date", value)
                       }
                       disabled={readOnly}
                     />

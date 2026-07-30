@@ -1,5 +1,6 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
+import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -101,11 +102,11 @@ export default function OverviewSection({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <Label htmlFor="start_date">Start Date *</Label>
-          <Input
+          <TemporalInput
             id="start_date"
             type="date"
             value={data.start_date || ""}
-            onChange={(e) => handleChange("start_date", e.target.value)}
+            onValueChange={(value) => handleChange("start_date", value)}
             disabled={readOnly}
             className={
               validationErrors.start_date
@@ -122,11 +123,11 @@ export default function OverviewSection({
 
         <div className="space-y-2">
           <Label htmlFor="end_date">End Date</Label>
-          <Input
+          <TemporalInput
             id="end_date"
             type="date"
             value={data.end_date || ""}
-            onChange={(e) => handleChange("end_date", e.target.value)}
+            onValueChange={(value) => handleChange("end_date", value)}
             disabled={readOnly}
           />
         </div>
@@ -135,22 +136,22 @@ export default function OverviewSection({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <Label htmlFor="start_time">Start Time</Label>
-          <Input
+          <TemporalInput
             id="start_time"
             type="time"
             value={data.start_time || ""}
-            onChange={(e) => handleChange("start_time", e.target.value)}
+            onValueChange={(value) => handleChange("start_time", value)}
             disabled={readOnly}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="end_time">End Time</Label>
-          <Input
+          <TemporalInput
             id="end_time"
             type="time"
             value={data.end_time || ""}
-            onChange={(e) => handleChange("end_time", e.target.value)}
+            onValueChange={(value) => handleChange("end_time", value)}
             disabled={readOnly}
           />
         </div>

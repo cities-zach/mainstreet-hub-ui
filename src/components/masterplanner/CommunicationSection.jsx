@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2, Upload, X, FileText, CheckCircle, AlertCircle, Clock } from "lucide-react";
@@ -148,10 +149,10 @@ export default function CommunicationSection({ data, onChange, readOnly }) {
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 md:w-48">
                     <Label className="text-sm text-slate-500">Due:</Label>
-                    <Input
+                    <TemporalInput
                       type="date"
                       value={getMaterialDueDate(type)}
-                      onChange={(e) => updateMaterialDueDate(type, e.target.value)}
+                      onValueChange={(value) => updateMaterialDueDate(type, value)}
                       disabled={readOnly}
                     />
                   </div>

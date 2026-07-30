@@ -103,17 +103,20 @@ export default function EventPlanForm() {
         ...formData,
         event_champion_user_id: formData.event_champion_user_id || user?.id || null,
       };
-      if (eventId) {
-        await apiFetch(`/events/${eventId}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        const created = await apiFetch(`/events`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        navigate(`/event-plan?id=${created.id}`);
+      const saved = eventId
+        ? await apiFetch(`/events/${eventId}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          })
+        : await apiFetch(`/events`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+
+      setFormData(saved);
+
+      if (!eventId) {
+        navigate(`/event-plan?id=${saved.id}`);
       }
       toast.success("Event plan saved");
     } catch (err) {

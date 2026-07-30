@@ -1,5 +1,6 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
+import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,49 +76,45 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <Label>Setup Start Time</Label>
-            <Input
+            <Label htmlFor="setup_start_time">Setup Start Time</Label>
+            <TemporalInput
+              id="setup_start_time"
               type="datetime-local"
               value={data.setup_start_time || ""}
-              onChange={(e) =>
-                handleChange("setup_start_time", e.target.value)
-              }
+              onValueChange={(value) => handleChange("setup_start_time", value)}
               disabled={readOnly}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Teardown End Time</Label>
-            <Input
+            <Label htmlFor="teardown_end_time">Teardown End Time</Label>
+            <TemporalInput
+              id="teardown_end_time"
               type="datetime-local"
               value={data.teardown_end_time || ""}
-              onChange={(e) =>
-                handleChange("teardown_end_time", e.target.value)
-              }
+              onValueChange={(value) => handleChange("teardown_end_time", value)}
               disabled={readOnly}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Event Start Time</Label>
-            <Input
+            <Label htmlFor="event_start_time">Event Start Time</Label>
+            <TemporalInput
+              id="event_start_time"
               type="time"
               value={data.event_start_time || ""}
-              onChange={(e) =>
-                handleChange("event_start_time", e.target.value)
-              }
+              onValueChange={(value) => handleChange("event_start_time", value)}
               disabled={readOnly}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Event End Time</Label>
-            <Input
+            <Label htmlFor="event_end_time">Event End Time</Label>
+            <TemporalInput
+              id="event_end_time"
               type="time"
               value={data.event_end_time || ""}
-              onChange={(e) =>
-                handleChange("event_end_time", e.target.value)
-              }
+              onValueChange={(value) => handleChange("event_end_time", value)}
               disabled={readOnly}
             />
           </div>
@@ -147,13 +144,12 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
                 className="flex flex-col md:flex-row gap-4 items-start bg-slate-50 p-3 rounded-lg border border-slate-100"
               >
                 <div className="w-full md:w-32">
-                  <Input
+                  <TemporalInput
                     type="time"
                     value={item.time}
-                    onChange={(e) =>
-                      updateItem(index, "time", e.target.value)
-                    }
+                    onValueChange={(value) => updateItem(index, "time", value)}
                     disabled={readOnly}
+                    aria-label={`Run of show item ${index + 1} time`}
                   />
                 </div>
 
@@ -273,12 +269,18 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
                 </div>
 
                 <div className="md:col-span-3 space-y-1">
-                  <Label className="text-xs text-slate-500">Due Date</Label>
-                  <Input
+                  <Label
+                    className="text-xs text-slate-500"
+                    htmlFor={`planning-due-date-${index}`}
+                  >
+                    Due Date
+                  </Label>
+                  <TemporalInput
+                    id={`planning-due-date-${index}`}
                     type="date"
                     value={item.due_date}
-                    onChange={(e) =>
-                      updatePlanningItem(index, "due_date", e.target.value)
+                    onValueChange={(value) =>
+                      updatePlanningItem(index, "due_date", value)
                     }
                     disabled={readOnly}
                   />

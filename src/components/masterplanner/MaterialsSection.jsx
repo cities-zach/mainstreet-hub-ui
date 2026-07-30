@@ -1,5 +1,6 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
+import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
@@ -162,11 +163,11 @@ export default function MaterialsSection({
 
               <div className="col-span-4 md:col-span-2">
                 <Label className="text-xs mb-1 block">Pickup Date</Label>
-                <Input
+                <TemporalInput
                   type="date"
                   value={item.pickup_date || ""}
-                  onChange={(e) =>
-                    updateMsoItem(index, "pickup_date", e.target.value)
+                  onValueChange={(value) =>
+                    updateMsoItem(index, "pickup_date", value)
                   }
                   disabled={readOnly}
                 />
@@ -174,11 +175,11 @@ export default function MaterialsSection({
 
               <div className="col-span-4 md:col-span-2">
                 <Label className="text-xs mb-1 block">Return Date</Label>
-                <Input
+                <TemporalInput
                   type="date"
                   value={item.return_date || ""}
-                  onChange={(e) =>
-                    updateMsoItem(index, "return_date", e.target.value)
+                  onValueChange={(value) =>
+                    updateMsoItem(index, "return_date", value)
                   }
                   disabled={readOnly}
                 />
