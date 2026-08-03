@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import BulkPasteDialog from "@/components/masterplanner/BulkPasteDialog";
+import ReorderableList from "@/components/masterplanner/ReorderableList";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +35,17 @@ import {
   Clock,
 } from "lucide-react";
 
+const VOLUNTEER_COLUMNS = [
+  { key: "task", label: "Task / role" },
+  { key: "date", label: "Date" },
+  { key: "schedule", label: "Schedule" },
+  { key: "location", label: "Location" },
+  { key: "hours", label: "Hours or TBD" },
+  { key: "count_needed", label: "Count needed or TBD" },
+  { key: "special_skills", label: "Special skills" },
+  { key: "instructions", label: "Instructions" },
+];
+
 export default function VolunteersSection({ data, onChange, readOnly }) {
   const [attendanceDialog, setAttendanceDialog] = React.useState({
     open: false,
@@ -45,12 +58,13 @@ export default function VolunteersSection({ data, onChange, readOnly }) {
 
   const addVolunteerOpportunity = () => {
     const newOpportunity = {
+      _row_id: globalThis.crypto.randomUUID(),
       task: "",
       date: data.start_date || "",
       schedule: "",
       location: data.location || "",
-      hours: 1,
-      count_needed: 1,
+      hours: "TBD",
+      count_needed: "TBD",
       training_required: false,
       special_skills: "",
       instructions: "",
@@ -95,13 +109,29 @@ export default function VolunteersSection({ data, onChange, readOnly }) {
             </h3>
           </div>
           {!readOnly && (
-            <Button
-              onClick={addVolunteerOpportunity}
-              className="gap-2 bg-[#835879] hover:bg-[#6d4964]"
-            >
-              <Plus className="w-4 h-4" />
-              Add Volunteer Task
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <BulkPasteDialog
+                title="Paste volunteer needs"
+                columns={VOLUNTEER_COLUMNS}
+                onImport={(rows) =>
+                  handleChange("volunteer_opportunities", [
+                    ...(data.volunteer_opportunities || []),
+                    ...rows.map((row) => ({
+                      ...row,
+                      training_required: false,
+                      assignments: [],
+                    })),
+                  ])
+                }
+              />
+              <Button
+                onClick={addVolunteerOpportunity}
+                className="gap-2 bg-[#835879] hover:bg-[#6d4964]"
+              >
+                <Plus className="w-4 h-4" />
+                Add Volunteer Task
+              </Button>
+            </div>
           )}
         </div>
 
@@ -111,13 +141,20 @@ export default function VolunteersSection({ data, onChange, readOnly }) {
           </div>
         )}
 
-        <div className="grid gap-4">
-          {data.volunteer_opportunities?.map((opp, index) => {
+        <ReorderableList
+          items={data.volunteer_opportunities || []}
+          disabled={readOnly}
+          className="grid gap-4"
+          onReorder={(items) =>
+            handleChange("volunteer_opportunities", items)
+          }
+          renderItem={(opp, index) => {
             const countFilled = opp.assignments?.length || 0;
-            const isFilled = countFilled >= opp.count_needed;
+            const needed = Number(opp.count_needed);
+            const isFilled = Number.isFinite(needed) && countFilled >= needed;
 
             return (
-              <Card key={index} className="border-slate-200 shadow-sm">
+              <Card className="border-slate-200 shadow-sm">
                 <CardContent className="p-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Input
@@ -155,31 +192,24 @@ export default function VolunteersSection({ data, onChange, readOnly }) {
                     />
 
                     <Input
-                      type="number"
-                      min="0.5"
-                      step="0.5"
-                      value={opp.hours}
+                      type="text"
+                      inputMode="decimal"
+                      value={opp.hours ?? ""}
                       onChange={(e) =>
-                        updateOpportunity(
-                          index,
-                          "hours",
-                          parseFloat(e.target.value) || 1
-                        )
+                        updateOpportunity(index, "hours", e.target.value)
                       }
+                      placeholder="Hours or TBD"
                       disabled={readOnly}
                     />
 
                     <Input
-                      type="number"
-                      min="1"
-                      value={opp.count_needed}
+                      type="text"
+                      inputMode="numeric"
+                      value={opp.count_needed ?? ""}
                       onChange={(e) =>
-                        updateOpportunity(
-                          index,
-                          "count_needed",
-                          parseInt(e.target.value) || 1
-                        )
+                        updateOpportunity(index, "count_needed", e.target.value)
                       }
+                      placeholder="Count or TBD"
                       disabled={readOnly}
                     />
 
@@ -282,8 +312,8 @@ export default function VolunteersSection({ data, onChange, readOnly }) {
                 </CardContent>
               </Card>
             );
-          })}
-        </div>
+          }}
+        />
       </div>
 
       {/* Attendance Dialog */}

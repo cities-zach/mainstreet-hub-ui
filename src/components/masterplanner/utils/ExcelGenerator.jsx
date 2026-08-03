@@ -31,11 +31,19 @@ export const downloadEventWorkbook = (event) => {
     createRow(["End Date", event.end_date]),
     createRow(["Start Time", event.start_time || event.event_start_time]),
     createRow(["End Time", event.end_time || event.event_end_time]),
-    createRow(["Organizing Committee", event.committee_organizing]),
+    createRow([
+      "Organizing Committees",
+      (event.organizing_committees || [event.committee_organizing])
+        .filter(Boolean)
+        .join(", "),
+    ]),
     createRow(["Admission", event.admission]),
     createRow(["Description", event.description]),
     createRow(["Target Audience", event.audience]),
     createRow(["Mission Fit", event.mission_fit]),
+    createRow(["Imported From", event.source_imported_from]),
+    createRow(["Source Year", event.source_year]),
+    createRow(["Import Caveats", event.import_caveats]),
   ];
 
   const contactsRows = [
@@ -75,6 +83,19 @@ export const downloadEventWorkbook = (event) => {
   (event.schedule_items || []).forEach((item) => {
     scheduleRows.push(
       createRow(["Run of Show", item.time, item.activity, item.location, ""])
+    );
+  });
+
+  scheduleRows.push(createRow(["--- Special Programs ---", "", "", "", ""]));
+  (event.special_programs || []).forEach((item) => {
+    scheduleRows.push(
+      createRow([
+        "Special Program",
+        `${item.starts_at || ""} - ${item.ends_at || ""}`,
+        item.name,
+        "",
+        "",
+      ])
     );
   });
 
@@ -139,12 +160,19 @@ export const downloadEventWorkbook = (event) => {
 
   const healthRows = [createRow(["Field", "Value"])];
   healthRows.push(createRow(["Est. Attendance", event.estimated_attendance]));
+  healthRows.push(
+    createRow(["Highest Possible Attendance", event.highest_possible_attendance])
+  );
   healthRows.push(createRow(["Anticipated Weather", event.anticipated_weather]));
   healthRows.push(createRow(["Crowd Control Plan", event.crowd_control_plan]));
   healthRows.push(createRow(["Alcohol Plan", event.alcohol_plan]));
   healthRows.push(createRow(["Emergency Person", event.emergency_person_responsible]));
   healthRows.push(createRow(["Weather Procedures", event.emergency_procedures_weather]));
   healthRows.push(createRow(["Medical Plan", event.first_aid_medical_plan]));
+  healthRows.push(createRow(["Lost Child Plan", event.lost_child_plan]));
+  healthRows.push(
+    createRow(["Emergency Communication", event.emergency_communication_plan])
+  );
 
   const siteRows = [createRow(["Field", "Value"])];
   siteRows.push(createRow(["Power Needs", event.power_needs_detail]));
@@ -153,6 +181,12 @@ export const downloadEventWorkbook = (event) => {
   siteRows.push(createRow(["Street Closure", event.street_closure_details]));
   siteRows.push(createRow(["Parking", event.parking_location]));
   siteRows.push(createRow(["Site Notes", event.site_notes]));
+
+  const postEventRows = [createRow(["Field", "Value"])];
+  postEventRows.push(createRow(["Actual Attendance", event.actual_attendance]));
+  postEventRows.push(createRow(["Actual Outcomes", event.event_outcomes]));
+  postEventRows.push(createRow(["Lessons Learned", event.lessons_learned]));
+  postEventRows.push(createRow(["Additional Notes", event.post_event_notes]));
 
   const workbookXML = `<?xml version="1.0"?>
 <?mso-application progid="Excel.Sheet"?>
@@ -170,6 +204,7 @@ export const downloadEventWorkbook = (event) => {
   ${createWorksheet("Finance", financeRows)}
   ${createWorksheet("Health and Safety", healthRows)}
   ${createWorksheet("Site Considerations", siteRows)}
+  ${createWorksheet("Post-Event Notes", postEventRows)}
 </Workbook>`;
 
   const blob = new Blob([workbookXML], { type: "application/vnd.ms-excel" });

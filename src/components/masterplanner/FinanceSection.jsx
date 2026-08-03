@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/select";
 import { Plus, Trash2, TrendingUp, TrendingDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import BulkPasteDialog from "@/components/masterplanner/BulkPasteDialog";
+import ReorderableList from "@/components/masterplanner/ReorderableList";
 
 const FUNDING_TYPES = [
   "Grant",
@@ -32,6 +34,14 @@ const EXPENSE_TYPES = [
   "Other",
 ];
 
+const FINANCE_COLUMNS = [
+  { key: "type", label: "Type" },
+  { key: "item", label: "Item" },
+  { key: "per_unit", label: "Per unit or TBD" },
+  { key: "quantity", label: "Quantity or TBD" },
+  { key: "notes", label: "Notes" },
+];
+
 export default function FinanceSection({ data, onChange, readOnly }) {
   const fundingSources = data.funding_sources || [];
   const projectedExpenses = data.projected_expenses || [];
@@ -43,6 +53,12 @@ export default function FinanceSection({ data, onChange, readOnly }) {
   };
 
   const computeLineTotal = (item) => {
+    if (
+      String(item?.per_unit || "").toUpperCase() === "TBD" ||
+      String(item?.quantity || "").toUpperCase() === "TBD"
+    ) {
+      return null;
+    }
     // Prefer stored total if present, but fall back to per_unit * quantity
     const stored = toNumber(item?.total);
     if (stored) return stored;
@@ -54,17 +70,18 @@ export default function FinanceSection({ data, onChange, readOnly }) {
 
   // Calculations
   const totalRevenue = fundingSources.reduce(
-    (sum, item) => sum + computeLineTotal(item),
+    (sum, item) => sum + (computeLineTotal(item) || 0),
     0
   );
   const totalExpenses = projectedExpenses.reduce(
-    (sum, item) => sum + computeLineTotal(item),
+    (sum, item) => sum + (computeLineTotal(item) || 0),
     0
   );
   const netIncome = totalRevenue - totalExpenses;
 
   // --- Helpers ---
   const formatCurrency = (value) => {
+    if (value === null) return "TBD";
     const n = toNumber(value);
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -77,11 +94,12 @@ export default function FinanceSection({ data, onChange, readOnly }) {
   // --- Funding Logic ---
   const addFundingSource = () => {
     const newItem = {
+      _row_id: globalThis.crypto.randomUUID(),
       type: "",
       item: "",
-      per_unit: 0,
-      quantity: 1,
-      total: 0,
+      per_unit: "TBD",
+      quantity: "TBD",
+      total: "TBD",
       notes: "",
     };
     onChange({ funding_sources: [...fundingSources, newItem] });
@@ -97,7 +115,11 @@ export default function FinanceSection({ data, onChange, readOnly }) {
 
       const pUnit = parseFloat(field === "per_unit" ? cleanVal : item.per_unit) || 0;
       const qty = parseFloat(field === "quantity" ? cleanVal : item.quantity) || 0;
-      item.total = pUnit * qty;
+      item.total =
+        String(cleanVal).toUpperCase() === "TBD" ||
+        String(field === "per_unit" ? item.quantity : item.per_unit).toUpperCase() === "TBD"
+          ? "TBD"
+          : pUnit * qty;
     } else {
       item[field] = value;
     }
@@ -113,11 +135,12 @@ export default function FinanceSection({ data, onChange, readOnly }) {
   // --- Expense Logic ---
   const addExpense = () => {
     const newItem = {
+      _row_id: globalThis.crypto.randomUUID(),
       type: "",
       item: "",
-      per_unit: 0,
-      quantity: 1,
-      total: 0,
+      per_unit: "TBD",
+      quantity: "TBD",
+      total: "TBD",
       notes: "",
     };
     onChange({ projected_expenses: [...projectedExpenses, newItem] });
@@ -133,7 +156,11 @@ export default function FinanceSection({ data, onChange, readOnly }) {
 
       const pUnit = parseFloat(field === "per_unit" ? cleanVal : item.per_unit) || 0;
       const qty = parseFloat(field === "quantity" ? cleanVal : item.quantity) || 0;
-      item.total = pUnit * qty;
+      item.total =
+        String(cleanVal).toUpperCase() === "TBD" ||
+        String(field === "per_unit" ? item.quantity : item.per_unit).toUpperCase() === "TBD"
+          ? "TBD"
+          : pUnit * qty;
     } else {
       item[field] = value;
     }
@@ -147,6 +174,22 @@ export default function FinanceSection({ data, onChange, readOnly }) {
       projected_expenses: projectedExpenses.filter((_, i) => i !== index),
     });
   };
+
+  const prepareFinanceRows = (rows) =>
+    rows.map((row) => {
+      const perUnit = Number(row.per_unit);
+      const quantity = Number(row.quantity);
+      const unresolved =
+        String(row.per_unit).toUpperCase() === "TBD" ||
+        String(row.quantity).toUpperCase() === "TBD";
+      return {
+        ...row,
+        total:
+          unresolved || !Number.isFinite(perUnit) || !Number.isFinite(quantity)
+            ? "TBD"
+            : perUnit * quantity,
+      };
+    });
 
   return (
     <div className="space-y-12 max-w-6xl">
@@ -210,21 +253,37 @@ export default function FinanceSection({ data, onChange, readOnly }) {
             <h2 className="text-2xl font-bold text-[#2d4650]">Funding Sources</h2>
           </div>
           {!readOnly && (
-            <Button
-              onClick={addFundingSource}
-              className="bg-green-600 hover:bg-green-700 text-white gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Funding
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <BulkPasteDialog
+                title="Paste funding sources"
+                columns={FINANCE_COLUMNS}
+                onImport={(rows) =>
+                  onChange({
+                    funding_sources: [
+                      ...fundingSources,
+                      ...prepareFinanceRows(rows),
+                    ],
+                  })
+                }
+              />
+              <Button
+                onClick={addFundingSource}
+                className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Funding
+              </Button>
+            </div>
           )}
         </div>
 
         <div className="space-y-4">
-          {fundingSources.map((item, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group"
-            >
+          <ReorderableList
+            items={fundingSources}
+            disabled={readOnly}
+            className="space-y-4"
+            onReorder={(items) => onChange({ funding_sources: items })}
+            renderItem={(item, index) => (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 pl-6 rounded-xl border border-slate-200 shadow-sm relative group">
               <div className="md:col-span-2 space-y-1">
                 <Label className="text-xs text-slate-500">Type</Label>
                 <Select
@@ -312,8 +371,9 @@ export default function FinanceSection({ data, onChange, readOnly }) {
                   <Trash2 className="w-4 h-4" />
                 </Button>
               )}
-            </div>
-          ))}
+              </div>
+            )}
+          />
 
           {fundingSources.length === 0 && (
             <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500">
@@ -331,21 +391,37 @@ export default function FinanceSection({ data, onChange, readOnly }) {
             <h2 className="text-2xl font-bold text-[#2d4650]">Expenses</h2>
           </div>
           {!readOnly && (
-            <Button
-              onClick={addExpense}
-              className="bg-red-600 hover:bg-red-700 text-white gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Expense
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <BulkPasteDialog
+                title="Paste expenses"
+                columns={FINANCE_COLUMNS}
+                onImport={(rows) =>
+                  onChange({
+                    projected_expenses: [
+                      ...projectedExpenses,
+                      ...prepareFinanceRows(rows),
+                    ],
+                  })
+                }
+              />
+              <Button
+                onClick={addExpense}
+                className="bg-red-600 hover:bg-red-700 text-white gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Expense
+              </Button>
+            </div>
           )}
         </div>
 
         <div className="space-y-4">
-          {projectedExpenses.map((item, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group"
-            >
+          <ReorderableList
+            items={projectedExpenses}
+            disabled={readOnly}
+            className="space-y-4"
+            onReorder={(items) => onChange({ projected_expenses: items })}
+            renderItem={(item, index) => (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 pl-6 rounded-xl border border-slate-200 shadow-sm relative group">
               <div className="md:col-span-2 space-y-1">
                 <Label className="text-xs text-slate-500">Type</Label>
                 <Select
@@ -433,8 +509,9 @@ export default function FinanceSection({ data, onChange, readOnly }) {
                   <Trash2 className="w-4 h-4" />
                 </Button>
               )}
-            </div>
-          ))}
+              </div>
+            )}
+          />
 
           {projectedExpenses.length === 0 && (
             <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500">

@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,22 @@ export default function OverviewSection({
   const handleChange = (field, value) => {
     onChange({ [field]: value });
   };
+  const selectedCommittees =
+    data.organizing_committees?.length
+      ? data.organizing_committees
+      : data.committee_organizing
+        ? [data.committee_organizing]
+        : [];
+
+  const toggleCommittee = (committee, checked) => {
+    const next = checked
+      ? Array.from(new Set([...selectedCommittees, committee]))
+      : selectedCommittees.filter((item) => item !== committee);
+    onChange({
+      organizing_committees: next,
+      committee_organizing: next[0] || "",
+    });
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -74,7 +91,7 @@ export default function OverviewSection({
             onValueChange={(val) => handleChange("event_type", val)}
             disabled={readOnly}
           >
-            <SelectTrigger>
+            <SelectTrigger id="event_type" aria-label="Event Type">
               <SelectValue placeholder="Select type" />
             </SelectTrigger>
             <SelectContent>
@@ -159,25 +176,31 @@ export default function OverviewSection({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <Label htmlFor="committee">Committee Organizing</Label>
-          <Select
-            value={data.committee_organizing || ""}
-            onValueChange={(val) =>
-              handleChange("committee_organizing", val)
-            }
-            disabled={readOnly}
+          <Label id="organizing-committees-label">Organizing Committees</Label>
+          <div
+            className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-2"
+            role="group"
+            aria-labelledby="organizing-committees-label"
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select committee" />
-            </SelectTrigger>
-            <SelectContent>
-              {COMMITTEES.map((committee) => (
-                <SelectItem key={committee} value={committee}>
-                  {committee}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {COMMITTEES.map((committee) => {
+              const id = `committee-${committee.toLowerCase().replace(/\s+/g, "-")}`;
+              return (
+                <div key={committee} className="flex items-center gap-2">
+                  <Checkbox
+                    id={id}
+                    checked={selectedCommittees.includes(committee)}
+                    onCheckedChange={(checked) =>
+                      toggleCommittee(committee, Boolean(checked))
+                    }
+                    disabled={readOnly}
+                  />
+                  <Label htmlFor={id} className="font-normal">
+                    {committee}
+                  </Label>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -226,6 +249,57 @@ export default function OverviewSection({
           rows={3}
           disabled={readOnly}
         />
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div>
+          <h3 className="font-semibold text-[#2d4650]">Source & Provenance</h3>
+          <p className="text-sm text-slate-500">
+            Record where historical plan information came from and any known
+            limitations.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="source_imported_from">Imported from</Label>
+            <Input
+              id="source_imported_from"
+              value={data.source_imported_from || ""}
+              onChange={(event) =>
+                handleChange("source_imported_from", event.currentTarget.value)
+              }
+              placeholder="File, system, or prior plan"
+              disabled={readOnly}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="source_year">Source year</Label>
+            <Input
+              id="source_year"
+              type="number"
+              inputMode="numeric"
+              value={data.source_year ?? ""}
+              onChange={(event) =>
+                handleChange("source_year", event.currentTarget.value)
+              }
+              placeholder="YYYY"
+              disabled={readOnly}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="import_caveats">Import caveats</Label>
+          <Textarea
+            id="import_caveats"
+            value={data.import_caveats || ""}
+            onChange={(event) =>
+              handleChange("import_caveats", event.currentTarget.value)
+            }
+            placeholder="Conflicting values, stale details, or items that need verification"
+            rows={3}
+            disabled={readOnly}
+          />
+        </div>
       </div>
     </div>
   );

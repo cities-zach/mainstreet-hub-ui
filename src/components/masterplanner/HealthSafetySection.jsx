@@ -16,12 +16,6 @@ export default function HealthSafetySection({ data, onChange, readOnly }) {
     onChange({ [field]: value });
   };
 
-  const parseNumber = (val) => {
-    if (val === "" || val === null || val === undefined) return "";
-    const n = Number(val);
-    return Number.isFinite(n) ? n : "";
-  };
-
   return (
     <div className="space-y-8 max-w-5xl">
       {/* General Info */}
@@ -40,15 +34,13 @@ export default function HealthSafetySection({ data, onChange, readOnly }) {
               <Label htmlFor="estimated_attendance">Estimated Attendance</Label>
               <Input
                 id="estimated_attendance"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={data.estimated_attendance ?? ""}
                 onChange={(e) =>
-                  handleChange(
-                    "estimated_attendance",
-                    parseNumber(e.target.value)
-                  )
+                  handleChange("estimated_attendance", e.currentTarget.value)
                 }
-                placeholder="e.g. 500"
+                placeholder="e.g. 500 or TBD"
                 disabled={readOnly}
               />
             </div>
@@ -58,15 +50,16 @@ export default function HealthSafetySection({ data, onChange, readOnly }) {
               </Label>
               <Input
                 id="highest_possible_attendance"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={data.highest_possible_attendance ?? ""}
                 onChange={(e) =>
                   handleChange(
                     "highest_possible_attendance",
-                    parseNumber(e.target.value)
+                    e.currentTarget.value
                   )
                 }
-                placeholder="e.g. 1000"
+                placeholder="e.g. 1000 or TBD"
                 disabled={readOnly}
               />
             </div>

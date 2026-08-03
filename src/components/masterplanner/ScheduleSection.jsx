@@ -3,6 +3,8 @@ import { Input } from "@/components/ui/input";
 import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import BulkPasteDialog from "@/components/masterplanner/BulkPasteDialog";
+import ReorderableList from "@/components/masterplanner/ReorderableList";
 import {
   Plus,
   Trash2,
@@ -11,16 +13,32 @@ import {
   Check,
 } from "lucide-react";
 
+const RUN_OF_SHOW_COLUMNS = [
+  { key: "time", label: "Time" },
+  { key: "activity", label: "Activity" },
+  { key: "location", label: "Location" },
+];
+
+const PLANNING_COLUMNS = [
+  { key: "task", label: "Task" },
+  { key: "responsible_person", label: "Responsible person" },
+  { key: "due_date", label: "Due date (YYYY-MM-DD)" },
+  { key: "notes", label: "Notes" },
+];
+
+const newRowId = () => globalThis.crypto.randomUUID();
+
 export default function ScheduleSection({ data, onChange, readOnly }) {
   const scheduleItems = data.schedule_items || [];
   const planningItems = data.planning_schedule_items || [];
+  const specialPrograms = data.special_programs || [];
 
   // --- Run of Show Functions ---
   const addItem = () => {
     onChange({
       schedule_items: [
         ...scheduleItems,
-        { time: "", activity: "", location: "" },
+        { _row_id: newRowId(), time: "", activity: "", location: "" },
       ],
     });
   };
@@ -42,7 +60,13 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
     onChange({
       planning_schedule_items: [
         ...planningItems,
-        { task: "", responsible_person: "", due_date: "", notes: "" },
+        {
+          _row_id: newRowId(),
+          task: "",
+          responsible_person: "",
+          due_date: "",
+          notes: "",
+        },
       ],
     });
   };
@@ -61,6 +85,21 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
 
   const handleChange = (field, value) => {
     onChange({ [field]: value });
+  };
+
+  const addSpecialProgram = () => {
+    onChange({
+      special_programs: [
+        ...specialPrograms,
+        { _row_id: newRowId(), name: "", starts_at: "", ends_at: "" },
+      ],
+    });
+  };
+
+  const updateSpecialProgram = (index, field, value) => {
+    const next = [...specialPrograms];
+    next[index] = { ...next[index], [field]: value };
+    onChange({ special_programs: next });
   };
 
   return (
@@ -120,29 +159,115 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
           </div>
         </div>
 
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <Label className="text-base font-semibold text-[#2d4650]">
+                Special Programs & Ceremonies
+              </Label>
+              <p className="text-sm text-slate-500">
+                Add one-time programs that occur within a longer event date range.
+              </p>
+            </div>
+            {!readOnly && (
+              <Button type="button" variant="outline" size="sm" onClick={addSpecialProgram}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Program
+              </Button>
+            )}
+          </div>
+          <ReorderableList
+            items={specialPrograms}
+            disabled={readOnly}
+            onReorder={(items) => onChange({ special_programs: items })}
+            renderItem={(program, index) => (
+              <div className="grid grid-cols-1 gap-3 rounded-lg bg-slate-50 p-3 pl-6 md:grid-cols-12">
+                <Input
+                  className="md:col-span-4"
+                  value={program.name || ""}
+                  onChange={(event) =>
+                    updateSpecialProgram(index, "name", event.currentTarget.value)
+                  }
+                  placeholder="Ceremony or program name"
+                  disabled={readOnly}
+                  aria-label={`Special program ${index + 1} name`}
+                />
+                <TemporalInput
+                  className="md:col-span-3"
+                  type="datetime-local"
+                  value={program.starts_at || ""}
+                  onValueChange={(value) =>
+                    updateSpecialProgram(index, "starts_at", value)
+                  }
+                  disabled={readOnly}
+                  aria-label={`Special program ${index + 1} start`}
+                />
+                <TemporalInput
+                  className="md:col-span-3"
+                  type="datetime-local"
+                  value={program.ends_at || ""}
+                  onValueChange={(value) =>
+                    updateSpecialProgram(index, "ends_at", value)
+                  }
+                  disabled={readOnly}
+                  aria-label={`Special program ${index + 1} end`}
+                />
+                {!readOnly && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="md:col-span-1"
+                    onClick={() =>
+                      onChange({
+                        special_programs: specialPrograms.filter(
+                          (_, itemIndex) => itemIndex !== index
+                        ),
+                      })
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
+
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Label className="text-lg font-semibold text-[#2d4650]">
               Run of Show / Schedule
             </Label>
             {!readOnly && (
-              <Button
-                onClick={addItem}
-                variant="outline"
-                size="sm"
-                className="gap-2"
-              >
-                <Plus className="w-4 h-4" /> Add Item
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <BulkPasteDialog
+                  title="Paste run-of-show items"
+                  columns={RUN_OF_SHOW_COLUMNS}
+                  onImport={(rows) =>
+                    onChange({ schedule_items: [...scheduleItems, ...rows] })
+                  }
+                />
+                <Button
+                  onClick={addItem}
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Add Item
+                </Button>
+              </div>
             )}
           </div>
 
           <div className="space-y-2">
-            {scheduleItems.map((item, index) => (
-              <div
-                key={index}
-                className="flex flex-col md:flex-row gap-4 items-start bg-slate-50 p-3 rounded-lg border border-slate-100"
-              >
+            <ReorderableList
+              items={scheduleItems}
+              disabled={readOnly}
+              onReorder={(items) => onChange({ schedule_items: items })}
+              className="space-y-2"
+              renderItem={(item, index) => (
+                <div className="flex flex-col md:flex-row gap-4 items-start bg-slate-50 p-3 pl-6 rounded-lg border border-slate-100">
                 <div className="w-full md:w-32">
                   <TemporalInput
                     type="time"
@@ -185,8 +310,9 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 )}
-              </div>
-            ))}
+                </div>
+              )}
+            />
 
             {scheduleItems.length === 0 && (
               <div className="text-sm text-slate-500 italic text-center py-4 bg-slate-50 rounded-lg">
@@ -210,23 +336,37 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
             </p>
           </div>
           {!readOnly && (
-            <Button
-              onClick={addPlanningItem}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Task
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <BulkPasteDialog
+                title="Paste planning tasks"
+                columns={PLANNING_COLUMNS}
+                onImport={(rows) =>
+                  onChange({
+                    planning_schedule_items: [...planningItems, ...rows],
+                  })
+                }
+              />
+              <Button
+                onClick={addPlanningItem}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Task
+              </Button>
+            </div>
           )}
         </div>
 
         <div className="space-y-3">
-          {planningItems.map((item, index) => (
-            <div
-              key={index}
-              className="bg-slate-50 p-4 rounded-lg border border-slate-200 relative"
-            >
+          <ReorderableList
+            items={planningItems}
+            disabled={readOnly}
+            onReorder={(items) =>
+              onChange({ planning_schedule_items: items })
+            }
+            renderItem={(item, index) => (
+              <div className="bg-slate-50 p-4 pl-6 rounded-lg border border-slate-200 relative">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                 <div className="md:col-span-5 space-y-1">
                   <Label className="text-xs text-slate-500">Task</Label>
@@ -309,8 +449,9 @@ export default function ScheduleSection({ data, onChange, readOnly }) {
                   <Trash2 className="w-3 h-3" />
                 </Button>
               )}
-            </div>
-          ))}
+              </div>
+            )}
+          />
 
           {planningItems.length === 0 && (
             <div className="text-sm text-slate-500 italic text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">

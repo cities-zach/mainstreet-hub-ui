@@ -4,6 +4,24 @@ import TemporalInput from "@/components/masterplanner/TemporalInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
+import BulkPasteDialog from "@/components/masterplanner/BulkPasteDialog";
+import ReorderableList from "@/components/masterplanner/ReorderableList";
+
+const INVENTORY_COLUMNS = [
+  { key: "supply_item_name", label: "Inventory item name" },
+  { key: "quantity", label: "Quantity or TBD" },
+  { key: "pickup_date", label: "Pickup date" },
+  { key: "return_date", label: "Return date" },
+  { key: "notes", label: "Notes" },
+];
+
+const EQUIPMENT_COLUMNS = [
+  { key: "item", label: "Item" },
+  { key: "quantity", label: "Quantity or TBD" },
+  { key: "source", label: "Source" },
+  { key: "cost", label: "Estimated cost or TBD" },
+  { key: "notes", label: "Notes" },
+];
 
 export default function MaterialsSection({
   data,
@@ -18,14 +36,12 @@ export default function MaterialsSection({
     (i) => i.status !== "retired"
   );
 
-  const parseIntSafe = (val, fallback = 1) => {
-    const n = parseInt(val, 10);
-    return Number.isFinite(n) ? n : fallback;
-  };
-
-  const parseFloatSafe = (val, fallback = 0) => {
-    const n = parseFloat(val);
-    return Number.isFinite(n) ? n : fallback;
+  const preserveTbdNumber = (value) => {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) return "";
+    if (normalized.toUpperCase() === "TBD") return "TBD";
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number : normalized;
   };
 
   /* ---------- MSO INVENTORY ---------- */
@@ -35,9 +51,10 @@ export default function MaterialsSection({
       mso_inventory_needs: [
         ...msoNeeds,
         {
+          _row_id: globalThis.crypto.randomUUID(),
           supply_item_id: "",
           supply_item_name: "",
-          quantity: 1,
+          quantity: "TBD",
           pickup_date: "",
           return_date: "",
           notes: "",
@@ -64,7 +81,14 @@ export default function MaterialsSection({
     onChange({
       equipment_needs: [
         ...equipmentNeeds,
-        { item: "", quantity: 1, source: "", cost: 0, notes: "" },
+        {
+          _row_id: globalThis.crypto.randomUUID(),
+          item: "",
+          quantity: "TBD",
+          source: "",
+          cost: "TBD",
+          notes: "",
+        },
       ],
     });
   };
@@ -95,23 +119,50 @@ export default function MaterialsSection({
             </p>
           </div>
           {!readOnly && (
-            <Button
-              onClick={addMsoItem}
-              variant="outline"
-              size="sm"
-              className="gap-2 text-[#610345] border-[#610345]"
-            >
-              <Plus className="w-4 h-4" /> Add Inventory Item
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <BulkPasteDialog
+                title="Paste inventory needs"
+                columns={INVENTORY_COLUMNS}
+                disabled={!availableInventory.length}
+                onImport={(rows) =>
+                  onChange({
+                    mso_inventory_needs: [
+                      ...msoNeeds,
+                      ...rows.map((row) => {
+                        const matched = availableInventory.find(
+                          (item) =>
+                            item.name?.toLowerCase() ===
+                            row.supply_item_name?.toLowerCase()
+                        );
+                        return {
+                          ...row,
+                          supply_item_id: matched?.id || "",
+                        };
+                      }),
+                    ],
+                  })
+                }
+              />
+              <Button
+                onClick={addMsoItem}
+                variant="outline"
+                size="sm"
+                className="gap-2 text-[#610345] border-[#610345]"
+                disabled={!availableInventory.length}
+              >
+                <Plus className="w-4 h-4" /> Add Inventory Item
+              </Button>
+            </div>
           )}
         </div>
 
         <div className="space-y-3">
-          {msoNeeds.map((item, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-12 gap-3 items-start bg-pink-50/30 p-4 rounded-lg border border-pink-100"
-            >
+          <ReorderableList
+            items={msoNeeds}
+            disabled={readOnly}
+            onReorder={(items) => onChange({ mso_inventory_needs: items })}
+            renderItem={(item, index) => (
+              <div className="grid grid-cols-12 gap-3 items-start bg-pink-50/30 p-4 pl-6 rounded-lg border border-pink-100">
               <div className="col-span-12 md:col-span-6">
                 <Label className="text-xs mb-1 block">Item</Label>
                 {readOnly ? (
@@ -135,8 +186,8 @@ export default function MaterialsSection({
                       <option key={inv.id} value={inv.id}>
                         {inv.name}
                         {inv.sku ? ` (SKU: ${inv.sku})` : ""}
-                        {typeof inv.quantity_on_hand === "number"
-                          ? ` • Available: ${inv.quantity_on_hand}`
+                        {typeof inv.quantity_available === "number"
+                          ? ` • Available: ${inv.quantity_available}`
                           : ""}
                       </option>
                     ))}
@@ -147,16 +198,17 @@ export default function MaterialsSection({
               <div className="col-span-4 md:col-span-2">
                 <Label className="text-xs mb-1 block">Quantity</Label>
                 <Input
-                  type="number"
-                  min="1"
-                  value={item.quantity}
+                  type="text"
+                  inputMode="numeric"
+                  value={item.quantity ?? ""}
                   onChange={(e) =>
                     updateMsoItem(
                       index,
                       "quantity",
-                      parseIntSafe(e.target.value)
+                      preserveTbdNumber(e.target.value)
                     )
                   }
+                  placeholder="Qty or TBD"
                   disabled={readOnly}
                 />
               </div>
@@ -209,14 +261,23 @@ export default function MaterialsSection({
                   </Button>
                 </div>
               )}
-            </div>
-          ))}
+              </div>
+            )}
+          />
 
-          {msoNeeds.length === 0 && (
+          {availableInventory.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-5 text-center text-sm text-amber-900">
+              No inventory items configured. Add them in{" "}
+              <a href="/supplystop" className="font-semibold underline">
+                SupplyStop
+              </a>{" "}
+              before selecting inventory for this plan.
+            </div>
+          ) : msoNeeds.length === 0 ? (
             <div className="text-center py-6 text-slate-500 text-sm italic">
               No MSO inventory items added.
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -232,18 +293,28 @@ export default function MaterialsSection({
             </p>
           </div>
           {!readOnly && (
-            <Button onClick={addOtherItem} variant="outline" size="sm" className="gap-2">
-              <Plus className="w-4 h-4" /> Add Other Item
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <BulkPasteDialog
+                title="Paste equipment and material needs"
+                columns={EQUIPMENT_COLUMNS}
+                onImport={(rows) =>
+                  onChange({ equipment_needs: [...equipmentNeeds, ...rows] })
+                }
+              />
+              <Button onClick={addOtherItem} variant="outline" size="sm" className="gap-2">
+                <Plus className="w-4 h-4" /> Add Other Item
+              </Button>
+            </div>
           )}
         </div>
 
         <div className="space-y-3">
-          {equipmentNeeds.map((item, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-12 gap-3 items-start bg-slate-50 p-3 rounded-lg"
-            >
+          <ReorderableList
+            items={equipmentNeeds}
+            disabled={readOnly}
+            onReorder={(items) => onChange({ equipment_needs: items })}
+            renderItem={(item, index) => (
+              <div className="grid grid-cols-12 gap-3 items-start bg-slate-50 p-3 pl-6 rounded-lg">
               <div className="col-span-3">
                 <Label className="text-xs mb-1 block">Item Name</Label>
                 <Input
@@ -258,16 +329,17 @@ export default function MaterialsSection({
               <div className="col-span-2">
                 <Label className="text-xs mb-1 block">Qty</Label>
                 <Input
-                  type="number"
-                  min="1"
-                  value={item.quantity}
+                  type="text"
+                  inputMode="numeric"
+                  value={item.quantity ?? ""}
                   onChange={(e) =>
                     updateOtherItem(
                       index,
                       "quantity",
-                      parseIntSafe(e.target.value)
+                      preserveTbdNumber(e.target.value)
                     )
                   }
+                  placeholder="Qty or TBD"
                   disabled={readOnly}
                 />
               </div>
@@ -286,16 +358,17 @@ export default function MaterialsSection({
               <div className="col-span-2">
                 <Label className="text-xs mb-1 block">Est. Cost</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  value={item.cost}
+                  type="text"
+                  inputMode="decimal"
+                  value={item.cost ?? ""}
                   onChange={(e) =>
                     updateOtherItem(
                       index,
                       "cost",
-                      parseFloatSafe(e.target.value)
+                      preserveTbdNumber(e.target.value)
                     )
                   }
+                  placeholder="Cost or TBD"
                   disabled={readOnly}
                 />
               </div>
@@ -323,8 +396,9 @@ export default function MaterialsSection({
                   </Button>
                 </div>
               )}
-            </div>
-          ))}
+              </div>
+            )}
+          />
 
           {equipmentNeeds.length === 0 && (
             <div className="text-center py-6 text-slate-500 text-sm italic">
