@@ -75,7 +75,7 @@ export default function CreateRequest() {
       const uploaded = await Promise.all(
         files.map((file) =>
           uploadPublicFile({
-            pathPrefix: "marketing-requests",
+            purpose: "marketing-request",
             file,
           })
         )

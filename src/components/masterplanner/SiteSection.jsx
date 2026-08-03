@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadPublicFile } from "@/lib/uploads";
+import SecureFileLink from "@/components/files/SecureFileLink";
 
 export default function SiteSection({ data, onChange, readOnly }) {
   const [uploading, setUploading] = React.useState(false);
@@ -33,7 +34,7 @@ export default function SiteSection({ data, onChange, readOnly }) {
     setUploading(true);
     try {
       const uploaded = await uploadPublicFile({
-        pathPrefix: "masterplanner/site-plans",
+        purpose: "masterplanner-site-plan",
         file,
       });
       handleChange("layout_plan_url", uploaded.file_url);
@@ -272,14 +273,14 @@ export default function SiteSection({ data, onChange, readOnly }) {
                   <FileText className="w-5 h-5 text-slate-500 flex-shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">Site Plan Uploaded</p>
-                    <a
+                    <SecureFileLink
                       href={data.layout_plan_url}
                       target="_blank"
                       rel="noreferrer"
                       className="text-xs text-[#835879] hover:underline"
                     >
                       View File
-                    </a>
+                    </SecureFileLink>
                   </div>
                 </div>
                 {!readOnly && (

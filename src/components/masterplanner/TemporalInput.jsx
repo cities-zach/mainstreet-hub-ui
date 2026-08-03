@@ -2,7 +2,7 @@ import React from "react";
 import { Input } from "@/components/ui/input";
 
 /** Keeps React state in sync when browsers mutate native date/time inputs directly. */
-export function syncTemporalValue(onValueChange) {
+function syncTemporalValue(onValueChange) {
   return (event) => {
     onValueChange(event.currentTarget.value);
   };

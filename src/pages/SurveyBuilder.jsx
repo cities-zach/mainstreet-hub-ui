@@ -60,6 +60,8 @@ export default function SurveyBuilder() {
   useEffect(() => {
     if (!existingSurvey) return;
 
+    // Hydrate the local draft when the asynchronous survey record changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSurveyData({
       title: existingSurvey.title || "",
       description: existingSurvey.description || "",
@@ -68,7 +70,7 @@ export default function SurveyBuilder() {
       respondent_emails: existingSurvey.respondent_emails || [],
       status: existingSurvey.status || "draft"
     });
-  }, [existingSurvey?.id]);
+  }, [existingSurvey]);
 
   useEffect(() => {
     if (!Array.isArray(existingQuestions)) return;
@@ -77,6 +79,8 @@ export default function SurveyBuilder() {
       (a, b) => a.order_index - b.order_index
     );
 
+    // Hydrate the reorderable local draft from the asynchronous query result.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuestions(ordered);
   }, [existingQuestions, surveyId]);
 

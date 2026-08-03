@@ -227,7 +227,7 @@ export default function MeetingNotes() {
       }
     };
     fetchNote();
-  }, [selectedMeetingId, selectedMeeting?.summary_status]);
+  }, [selectedMeetingId, selectedMeeting?.summary_status, selectedMeeting?.transcript]);
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">

@@ -171,7 +171,7 @@ export default function BudgetDetails() {
 
   if (!budget) return <div>Budget not found</div>;
 
-  const LineItemTable = ({ items, type }) => (
+  const renderLineItemTable = (items, type) => (
     <div className="rounded-md border border-slate-200 overflow-hidden">
       <Table>
         <TableHeader>
@@ -362,10 +362,10 @@ export default function BudgetDetails() {
                 <TabsTrigger value="revenue">Revenue</TabsTrigger>
               </TabsList>
               <TabsContent value="expenses">
-                <LineItemTable items={expenseItems} type="Expense" />
+                {renderLineItemTable(expenseItems, "Expense")}
               </TabsContent>
               <TabsContent value="revenue">
-                <LineItemTable items={revenueItems} type="Revenue" />
+                {renderLineItemTable(revenueItems, "Revenue")}
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -9,7 +9,6 @@ export default function CommentsSection({
   requestId,
   comments = [],
   user,
-  request,
 }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");

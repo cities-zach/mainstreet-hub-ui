@@ -265,7 +265,8 @@ export default function Settings({ currentUser, isSuperAdmin, isAdmin }) {
     setLogoUploading(true);
     try {
       const uploaded = await uploadPublicFile({
-        pathPrefix: "org-logos",
+        visibility: "public",
+        purpose: "organization-logo",
         file,
       });
 

@@ -1,36 +1,28 @@
-import { supabase } from "@/lib/supabaseClient";
+import { API_BASE, buildAuthHeaders } from "@/api";
 
-const INVALID_FILENAME_CHARS = /[^a-zA-Z0-9._-]/g;
-
-function sanitizeFileName(name = "file") {
-  const trimmed = name.trim() || "file";
-  return trimmed.replace(INVALID_FILENAME_CHARS, "_");
+export async function uploadFile({
+  file,
+  visibility = "private",
+  purpose = "internal-attachment",
+  publicSurvey = null,
+}) {
+  if (!file) throw new Error("No file provided");
+  const body = new FormData();
+  body.append("file", file, file.name || "file");
+  const path = publicSurvey
+    ? `/public/surveys/${publicSurvey.surveyId}/questions/${publicSurvey.questionId}/files`
+    : `/files/${visibility === "public" ? "public" : "private"}?purpose=${encodeURIComponent(purpose)}`;
+  const headers = publicSurvey
+    ? new Headers({ "x-org-slug": "ottumwa" })
+    : await buildAuthHeaders();
+  const response = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `Upload failed (${response.status})`);
+  return data;
 }
 
-export async function uploadPublicFile({ bucket = "uploads", pathPrefix = "", file }) {
-  if (!file) {
-    throw new Error("No file provided");
-  }
+export const uploadPublicFile = uploadFile;
 
-  const safeName = sanitizeFileName(file.name || "file");
-  const prefix = pathPrefix ? pathPrefix.replace(/\/+$/, "") : "misc";
-  const filePath = `${prefix}/${Date.now()}-${safeName}`;
-
-  const { error } = await supabase.storage.from(bucket).upload(filePath, file, {
-    upsert: false,
-  });
-
-  if (error) {
-    throw error;
-  }
-
-  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-
-  return {
-    file_name: file.name || safeName,
-    file_url: data?.publicUrl || "",
-    mime_type: file.type || null,
-    size: file.size || null,
-    storage_path: filePath,
-  };
+export function secureFileId(url) {
+  return String(url || "").match(/\/files\/([0-9a-f-]{36})\/download(?:\?|$)/i)?.[1] || null;
 }

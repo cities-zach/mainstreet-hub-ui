@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import SecureFileLink from "@/components/files/SecureFileLink";
 
 export default function MaterialsCard({ material }) {
   if (!material) return null;
@@ -18,14 +19,14 @@ export default function MaterialsCard({ material }) {
           </p>
         )}
         {material.file_url && (
-          <a
+          <SecureFileLink
             href={material.file_url}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-[#835879] underline"
           >
             View file
-          </a>
+          </SecureFileLink>
         )}
       </CardContent>
     </Card>

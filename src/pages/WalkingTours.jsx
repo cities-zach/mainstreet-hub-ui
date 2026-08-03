@@ -220,7 +220,8 @@ export default function WalkingTours() {
       setUploading((current) => ({ ...current, banner: true }));
       const result = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: "walking-tours/banners",
+        visibility: "public",
+        purpose: "walking-tour-image",
         file,
       });
       if (selectedTourId) {
@@ -244,7 +245,8 @@ export default function WalkingTours() {
       setUploading((current) => ({ ...current, stop: true }));
       const result = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: "walking-tours/stops",
+        visibility: "public",
+        purpose: "walking-tour-image",
         file,
       });
       setStopForm((current) => ({ ...current, photo_url: result.file_url }));

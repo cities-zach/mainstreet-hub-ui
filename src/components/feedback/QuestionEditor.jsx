@@ -51,15 +51,14 @@ export default function QuestionEditor({
   onDelete,
   disabled = false
 }) {
-  if (!question) return null;
-
   const emit = (updates) => {
     // SurveyBuilder expects partial updates; keep that contract.
     onChange?.(updates);
   };
 
-  const rawType = question.question_type || "scale";
+  const rawType = question?.question_type || "scale";
   const qType = rawType === "short_text" ? "text" : rawType;
+  const questionOptions = question?.options;
 
   const QUESTION_TYPES = useMemo(
     () => [
@@ -82,7 +81,7 @@ export default function QuestionEditor({
 
   // Normalize options: allow string[] or object[] from DB.
   const normalizedOptions = useMemo(() => {
-    const raw = question.options;
+    const raw = questionOptions;
 
     if (!Array.isArray(raw)) return [];
 
@@ -100,7 +99,7 @@ export default function QuestionEditor({
         return null;
       })
       .filter(Boolean);
-  }, [question.options]);
+  }, [questionOptions]);
 
   const isChoiceType =
     qType === "multiple_choice" || qType === "checkbox" || qType === "dropdown";
@@ -179,11 +178,11 @@ export default function QuestionEditor({
   };
 
   const toggleRequired = () => {
-    emit({ required: !Boolean(question.required) });
+    emit({ required: !question.required });
   };
 
   const toggleOther = () => {
-    emit({ allow_other: !Boolean(question.allow_other) });
+    emit({ allow_other: !question.allow_other });
   };
 
   // Light validation hints (non-blocking)
@@ -200,6 +199,8 @@ export default function QuestionEditor({
     if (hasDupes) return "Option text should be unique.";
     return null;
   }, [normalizedOptions, isChoiceType, qType]);
+
+  if (!question) return null;
 
   return (
     <div className="border rounded-lg p-4 space-y-4 bg-slate-50">

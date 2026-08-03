@@ -198,7 +198,8 @@ export default function Fundraising() {
       setUploading(true);
       const result = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: "fundraising/campaigns",
+        visibility: "public",
+        purpose: "fundraising-image",
         file,
       });
       setForm((current) => ({ ...current, photo_url: result.file_url }));

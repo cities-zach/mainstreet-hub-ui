@@ -20,21 +20,19 @@ export default function TaskItem({
   task,
   currentUser,
   onUpdate,
-  onLevelUp,
   taskCompletionSoundUrl = "",
 }) {
-  if (!task) return null;
-
-  const completed = task.status === "completed";
+  const completed = task?.status === "completed";
   const [isProcessing, setIsProcessing] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [steps, setSteps] = useState([]);
   const [stepsLoading, setStepsLoading] = useState(false);
   const [newStepTitle, setNewStepTitle] = useState("");
+  const taskId = task?.id;
   const dueDate = useMemo(
-    () => (task.due_date ? parseISO(task.due_date) : null),
-    [task.due_date]
+    () => (task?.due_date ? parseISO(task.due_date) : null),
+    [task?.due_date]
   );
   const isOverdue = !!dueDate && !completed && isBefore(endOfDay(dueDate), new Date());
   const daysUntilDue =
@@ -47,11 +45,11 @@ export default function TaskItem({
       : "border-slate-200";
 
   const assignedToLabel =
-    task.assigned_to_name || task.assigned_to_email || "Unassigned";
-  const updatedAt = task.updated_at ? parseISO(task.updated_at) : null;
-  const stepTotal = Number(task.step_count || 0);
-  const stepCompleted = Number(task.step_completed_count || 0);
-  const crmLinks = Array.isArray(task.crm_links) ? task.crm_links : [];
+    task?.assigned_to_name || task?.assigned_to_email || "Unassigned";
+  const updatedAt = task?.updated_at ? parseISO(task.updated_at) : null;
+  const stepTotal = Number(task?.step_count || 0);
+  const stepCompleted = Number(task?.step_completed_count || 0);
+  const crmLinks = Array.isArray(task?.crm_links) ? task.crm_links : [];
   const crmLinkPath = (link) =>
     link.contact_id
       ? `/crm/contacts/${link.contact_id}`
@@ -62,12 +60,12 @@ export default function TaskItem({
           : null;
 
   useEffect(() => {
-    if (!stepsOpen) return;
+    if (!stepsOpen || !taskId) return;
     let active = true;
     const loadSteps = async () => {
       setStepsLoading(true);
       try {
-        const data = await apiFetch(`/tasks/${task.id}/steps`);
+        const data = await apiFetch(`/tasks/${taskId}/steps`);
         if (active) setSteps(data || []);
       } catch (err) {
         toast.error(err.message || "Failed to load steps");
@@ -79,7 +77,9 @@ export default function TaskItem({
     return () => {
       active = false;
     };
-  }, [stepsOpen, task.id]);
+  }, [stepsOpen, taskId]);
+
+  if (!task) return null;
 
   const handleAddStep = async (event) => {
     event.preventDefault();

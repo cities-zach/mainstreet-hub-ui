@@ -13,7 +13,6 @@ import { uploadPublicFile } from "@/lib/uploads";
 export default function MaterialsSection({
   request,
   materials = [],
-  isRequester,
   canUploadMaterials,
 }) {
   const queryClient = useQueryClient();
@@ -52,7 +51,7 @@ export default function MaterialsSection({
     setUploading(true);
     try {
       const uploaded = await uploadPublicFile({
-        pathPrefix: `marketing-materials/${request.id}`,
+        purpose: "marketing-material",
         file,
       });
       setFormData((prev) => ({

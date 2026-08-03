@@ -22,27 +22,19 @@ export default function RequisitionForm({ inventory = [], onSuccess, onCancel })
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const requisition = await apiFetch("/requisitions", {
+      return apiFetch("/requisitions", {
         method: "POST",
         body: JSON.stringify({
           title,
           description,
           needed_by: neededBy || null,
-          amount: null
-        })
-      });
-
-      for (const item of itemsArray) {
-        await apiFetch(`/requisitions/${requisition.id}/items`, {
-          method: "POST",
-          body: JSON.stringify({
+          amount: null,
+          items: itemsArray.map((item) => ({
             supply_item_id: item.id,
             quantity: item.qty
-          })
-        });
-      }
-
-      return requisition;
+          }))
+        })
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
