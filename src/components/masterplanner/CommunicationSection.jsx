@@ -89,7 +89,7 @@ export default function CommunicationSection({ data, onChange, readOnly }) {
       const uploaded = await Promise.all(
         files.map((file) =>
           uploadPublicFile({
-            pathPrefix: "masterplanner/marketing-files",
+            purpose: "masterplanner-marketing-file",
             file,
           })
         )

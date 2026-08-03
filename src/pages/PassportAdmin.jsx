@@ -59,7 +59,8 @@ function StopEditor({ stop, onSave }) {
       setUploadingLogo(true);
       const result = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: "passport-stops",
+        visibility: "public",
+        purpose: "passport-image",
         file
       });
       setForm((prev) => ({ ...prev, logo_url: result.file_url }));
@@ -382,7 +383,7 @@ export default function PassportAdmin() {
     if (!selectedPassport) return;
     setSubmissionQuestions(passportDetail?.submission_questions || []);
     setPaidPrice(formatDollars(selectedPassport.price_cents));
-  }, [selectedPassport?.id, selectedPassport?.price_cents, passportDetail?.submission_questions]);
+  }, [selectedPassport, passportDetail?.submission_questions]);
 
   const publicUrl = useMemo(() => {
     if (!selectedPassport?.public_slug) return null;
@@ -422,7 +423,8 @@ export default function PassportAdmin() {
       setUploadingStopLogo(true);
       const result = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: "passport-stops",
+        visibility: "public",
+        purpose: "passport-image",
         file
       });
       setStopForm((prev) => ({ ...prev, logo_url: result.file_url }));
@@ -442,7 +444,8 @@ export default function PassportAdmin() {
       setUploadingBanner(true);
       const result = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: "passport-banners",
+        visibility: "public",
+        purpose: "passport-image",
         file
       });
       if (applyToSelected && selectedPassport?.id) {

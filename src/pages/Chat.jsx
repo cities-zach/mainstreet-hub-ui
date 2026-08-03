@@ -12,13 +12,13 @@ import {
   getUserRoster,
   markChatChannelRead,
   removeChatChannelMember,
-  toggleChatReaction,
-  API_BASE
+  toggleChatReaction
 } from "@/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadPublicFile } from "@/lib/uploads";
+import SecureFileLink from "@/components/files/SecureFileLink";
 import { toast } from "sonner";
 
 const REACTION_OPTIONS = ["👍", "🎉", "❤️", "😂"];
@@ -59,7 +59,10 @@ export default function Chat() {
     enabled: !!selectedChannelId
   });
 
-  const messages = messagesPayload?.messages || [];
+  const messages = useMemo(
+    () => messagesPayload?.messages || [],
+    [messagesPayload?.messages]
+  );
   const attachmentMap = useMemo(() => {
     const map = new Map();
     for (const file of messagesPayload?.attachments || []) {
@@ -114,26 +117,13 @@ export default function Chat() {
 
   useEffect(() => {
     if (!selectedChannelId) return;
-    const userId = me?.user?.id || "";
-    const userEmail = me?.user?.email || "";
-    const url = new URL(`${API_BASE}/chat/stream`, window.location.origin);
-    url.searchParams.set("channel_id", selectedChannelId);
-    if (userId) url.searchParams.set("user_id", userId);
-    if (userEmail) url.searchParams.set("user_email", userEmail);
-    const source = new EventSource(url.toString());
     const handleEvent = () => {
       queryClient.invalidateQueries({ queryKey: ["chat-messages", selectedChannelId] });
       queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
     };
-    source.addEventListener("message", handleEvent);
-    source.addEventListener("reaction", handleEvent);
-    source.onerror = () => {
-      source.close();
-    };
-    return () => {
-      source.close();
-    };
-  }, [selectedChannelId, me?.user?.id, me?.user?.email, queryClient]);
+    const timer = window.setInterval(handleEvent, 5000);
+    return () => window.clearInterval(timer);
+  }, [selectedChannelId, queryClient]);
 
   const handleUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -142,8 +132,7 @@ export default function Chat() {
     try {
       setUploading(true);
       const uploaded = await uploadPublicFile({
-        bucket: "uploads",
-        pathPrefix: "chat-uploads",
+        purpose: "chat-attachment",
         file
       });
       setAttachments((prev) => [
@@ -250,18 +239,17 @@ export default function Chat() {
     .map((member) => member.full_name || member.email)
     .filter(Boolean)
     .join(", ");
-  const lastReadAt = selectedChannel?.last_read_at
-    ? new Date(selectedChannel.last_read_at)
-    : null;
-
   const firstUnreadId = useMemo(() => {
+    const lastReadAt = selectedChannel?.last_read_at
+      ? new Date(selectedChannel.last_read_at)
+      : null;
     if (!lastReadAt) return null;
     const next = orderedMessages.find((msg) => {
       if (!msg.created_at) return false;
       return new Date(msg.created_at) > lastReadAt;
     });
     return next?.id || null;
-  }, [lastReadAt, orderedMessages]);
+  }, [selectedChannel?.last_read_at, orderedMessages]);
 
   const groupedMessages = useMemo(() => {
     const groups = [];
@@ -574,7 +562,7 @@ export default function Chat() {
                               {files.length > 0 && (
                                 <div className="mt-2 space-y-1">
                                   {files.map((file) => (
-                                    <a
+                                    <SecureFileLink
                                       key={file.id}
                                       href={file.file_url}
                                       target="_blank"
@@ -584,7 +572,7 @@ export default function Chat() {
                                       }`}
                                     >
                                       {file.file_name || "Attachment"}
-                                    </a>
+                                    </SecureFileLink>
                                   ))}
                                 </div>
                               )}

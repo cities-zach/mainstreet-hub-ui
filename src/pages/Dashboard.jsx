@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import ThreeMonthCalendar from "@/components/dashboard/ThreeMonthCalendar";
 import { apiFetch } from "@/api";
 
-const ModuleCard = ({ title, description, icon: Icon, url, color }) => (
+const ModuleCard = ({ title, description, icon, url, color }) => (
   <Link to={url}>
     <Card className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 h-full border-slate-200 dark:border-slate-800 group">
       <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
@@ -26,7 +26,7 @@ const ModuleCard = ({ title, description, icon: Icon, url, color }) => (
           className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-md transition-transform group-hover:scale-110"
           style={{ backgroundColor: color }}
         >
-          <Icon className="w-8 h-8 text-white" />
+          {React.createElement(icon, { className: "w-8 h-8 text-white" })}
         </div>
         <div>
           <h3 className="text-xl font-bold mb-2 text-slate-800 dark:text-slate-100">

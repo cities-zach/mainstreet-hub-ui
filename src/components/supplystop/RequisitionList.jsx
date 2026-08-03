@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/api";
 
-export default function RequisitionList({ isAdmin, currentUser }) {
+export default function RequisitionList({ isAdmin }) {
   const queryClient = useQueryClient();
   const { data: requisitions = [], isLoading } = useQuery({
     queryKey: ["requisitions"],

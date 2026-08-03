@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
-import { Bot, Minus, Send } from "lucide-react";
+import { Bot, Minus, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/api";
@@ -77,7 +77,7 @@ export default function AIChatPanel({ isOpen, onClose }) {
           content: response.message || "Sorry, I didn't catch that. Try again?",
         },
       ]);
-    } catch (error) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -132,6 +132,15 @@ export default function AIChatPanel({ isOpen, onClose }) {
             onClick={() => setIsMinimized(true)}
           >
             <Minus className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-slate-500"
+            onClick={onClose}
+            aria-label="Close FRED"
+          >
+            <X className="w-4 h-4" />
           </Button>
         </div>
       </div>

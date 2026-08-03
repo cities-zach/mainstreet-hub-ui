@@ -8,13 +8,9 @@ export const API_BASE =
 export async function buildAuthHeaders(extraHeaders = {}) {
   const headers = new Headers(extraHeaders);
   const { data: sessionData } = await supabase.auth.getSession();
-  const sessionUserId = sessionData?.session?.user?.id;
-  const sessionUserEmail = sessionData?.session?.user?.email;
-  if (sessionUserId) {
-    headers.set("x-user-id", sessionUserId);
-  }
-  if (sessionUserEmail) {
-    headers.set("x-user-email", sessionUserEmail);
+  const accessToken = sessionData?.session?.access_token;
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
   headers.set("x-org-slug", "ottumwa");
   return headers;

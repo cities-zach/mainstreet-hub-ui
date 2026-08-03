@@ -78,13 +78,13 @@ export default function WheelCanvas({
   const { wedges, totalWeight, colors } = useMemo(() => {
     const total =
       entries.reduce((sum, entry) => sum + (Number(entry.weight) || 1), 0) || 1;
-    let current = 0;
-    const built = entries.map((entry) => {
+    const built = entries.map((entry, index) => {
       const weight = Number(entry.weight) || 1;
       const slice = (weight / total) * 360;
-      const startAngle = current;
+      const startAngle = entries
+        .slice(0, index)
+        .reduce((angle, prior) => angle + ((Number(prior.weight) || 1) / total) * 360, 0);
       const endAngle = startAngle + slice;
-      current = endAngle;
       return {
         ...entry,
         startAngle,

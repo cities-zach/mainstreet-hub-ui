@@ -55,7 +55,7 @@ export default function InteractiveTourMap({
       // Some browsers/bots have no WebGL support; degrade gracefully instead
       // of crashing the whole page.
       console.warn("Map could not be initialized:", error);
-      setMapError(true);
+      queueMicrotask(() => setMapError(true));
     }
   }, [mapCenter, mapStyle, mapZoom, mapboxToken]);
 

@@ -52,27 +52,9 @@ export default function WheelSpinPresenter({ me }) {
     [entries, excludeIds, removeWinnerOnSpin]
   );
 
-  const wedges = useMemo(() => {
-    const total =
-      visibleEntries.reduce(
-        (sum, entry) => sum + (Number(entry.weight) || 1),
-        0
-      ) || 1;
-    let current = 0;
-    return visibleEntries.map((entry) => {
-      const weight = Number(entry.weight) || 1;
-      const slice = (weight / total) * 360;
-      const startAngle = current;
-      const endAngle = startAngle + slice;
-      current = endAngle;
-      return {
-        ...entry,
-        midAngle: (startAngle + endAngle) / 2
-      };
-    });
-  }, [visibleEntries]);
-
   useEffect(() => {
+    // Reset presenter-local state when navigating to a different wheel.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWinners([]);
     setExcludeIds([]);
     setPendingWinner(null);
@@ -152,7 +134,7 @@ export default function WheelSpinPresenter({ me }) {
         return;
       }
       setIsSpinning(false);
-    } catch (error) {
+    } catch {
       setIsSpinning(false);
     }
   };

@@ -12,7 +12,11 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run dev",
+    command: "npm run dev:test",
+    env: {
+      ...process.env,
+      VITE_API_URL: "/api",
+    },
     url: "http://localhost:5173",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

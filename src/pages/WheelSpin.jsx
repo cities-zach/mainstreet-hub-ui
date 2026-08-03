@@ -52,6 +52,8 @@ export default function WheelSpin({ me }) {
   useEffect(() => {
     if (!wheelDetail?.wheel) return;
     const wheel = wheelDetail.wheel;
+    // Hydrate the editable wheel form when the selected server record arrives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(wheel.name || "");
     setWinnersCount(Number(wheel.winners_count) || 1);
     setRemoveWinnerOnSpin(!!wheel.remove_winner_on_spin);

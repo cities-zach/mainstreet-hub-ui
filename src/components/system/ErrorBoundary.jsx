@@ -61,7 +61,7 @@ export default class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     const componentStack = info?.componentStack || "";
     this.setState({ componentStack });
-    // eslint-disable-next-line no-console
+
     console.error("[ErrorBoundary] caught an error:", error, info);
     // Fire-and-forget automatic report so we always get notified.
     this.submitReport({ silent: true });

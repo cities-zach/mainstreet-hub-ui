@@ -173,8 +173,8 @@ export default function PassportPublic() {
             players: (detail.players || []).map((player) => player.player_name || "")
           });
         }
-        if (!selectedStop && (detail.stops || []).length > 0) {
-          setSelectedStop(detail.stops[0]);
+        if ((detail.stops || []).length > 0) {
+          setSelectedStop((current) => current || detail.stops[0]);
         }
       } catch (err) {
         if (!isMounted) return;
@@ -192,7 +192,7 @@ export default function PassportPublic() {
     return () => {
       isMounted = false;
     };
-  }, [slug, paymentSessionId]);
+  }, [paymentSessionId, setSearchParams, slug, tokenKey]);
 
   useEffect(() => {
     const stampIfNeeded = async () => {
@@ -239,7 +239,7 @@ export default function PassportPublic() {
       }
     };
     stampIfNeeded();
-  }, [qrToken, bonusToken, mulliganToken, instance?.token]);
+  }, [bonusToken, instance?.token, mulliganToken, qrToken, setSearchParams]);
 
   useEffect(() => {
     if (!scoringEnabled) return;

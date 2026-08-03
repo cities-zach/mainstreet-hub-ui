@@ -247,7 +247,8 @@ export default function Contests() {
     try {
       const uploaded = await uploadPublicFile({
         bucket: "uploads",
-        pathPrefix: `contests/${selectedId || "draft"}`,
+        visibility: "public",
+        purpose: "contest-image",
         file
       });
       setContest((current) => ({

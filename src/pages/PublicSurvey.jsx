@@ -59,7 +59,7 @@ export default function PublicSurvey() {
   });
 
   const survey = data?.survey;
-  const questions = data?.questions ?? [];
+  const questions = useMemo(() => data?.questions ?? [], [data?.questions]);
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -97,7 +97,7 @@ export default function PublicSurvey() {
       const uploaded = await Promise.all(
         files.map((file) =>
           uploadPublicFile({
-            pathPrefix: `surveys/${surveyId}/${question.id}`,
+            publicSurvey: { surveyId, questionId: question.id },
             file,
           })
         )

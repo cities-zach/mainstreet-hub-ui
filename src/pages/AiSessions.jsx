@@ -158,6 +158,8 @@ export default function AiSessions() {
 
   useEffect(() => {
     if (!selectedId && sessions.length > 0) {
+      // Select the first server result once the asynchronous list arrives.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedId(sessions[0].id);
     }
   }, [sessions, selectedId]);
@@ -165,6 +167,8 @@ export default function AiSessions() {
   useEffect(() => {
     if (!selectedSession?.session_memory) return;
     const memory = selectedSession.session_memory;
+    // Hydrate the local editable form when the selected server record changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormState({
       current_focus: memory.current_focus || "",
       conversation_summary: memory.conversation_summary || "",

@@ -1,4 +1,3 @@
-/* global process */
 import { test, expect } from "@playwright/test";
 
 const hasAuth = Boolean(process.env.E2E_EMAIL && process.env.E2E_PASSWORD);
@@ -103,8 +102,12 @@ test.describe("MasterPlanner planning improvements", () => {
     await expect(page.getByLabel("Special program 1 name")).toHaveValue(
       "Opening Ceremony"
     );
-    await expect(page.getByDisplayValue("Doors open")).toBeVisible();
-    await expect(page.getByDisplayValue("Welcome")).toBeVisible();
+    await expect(page.getByPlaceholder("Activity / Performance").nth(0)).toHaveValue(
+      "Doors open"
+    );
+    await expect(page.getByPlaceholder("Activity / Performance").nth(1)).toHaveValue(
+      "Welcome"
+    );
 
     await page
       .getByRole("button", { name: "Post-Event Notes", exact: true })

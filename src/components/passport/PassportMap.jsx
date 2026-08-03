@@ -33,7 +33,10 @@ export default function PassportMap({
   const fallbackStop = stops.find(
     (stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng)
   );
-  const mapCenter = mapConfig?.center || (fallbackStop ? [fallbackStop.lng, fallbackStop.lat] : DEFAULT_CENTER);
+  const mapCenter = useMemo(
+    () => mapConfig?.center || (fallbackStop ? [fallbackStop.lng, fallbackStop.lat] : DEFAULT_CENTER),
+    [fallbackStop, mapConfig?.center]
+  );
   const mapZoom = Number.isFinite(mapConfig?.zoom)
     ? mapConfig.zoom
     : fallbackStop
@@ -55,7 +58,7 @@ export default function PassportMap({
     } catch (error) {
       // Some browsers/bots have no WebGL support; degrade gracefully.
       console.warn("Map could not be initialized:", error);
-      setMapError(true);
+      queueMicrotask(() => setMapError(true));
     }
   }, [mapboxToken, mapStyle, mapCenter, mapZoom]);
 
@@ -93,7 +96,7 @@ export default function PassportMap({
     if (hasBounds) {
       map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
     }
-  }, [stops, visitedStopIds]);
+  }, [onSelectStop, stops, visitedStopIds]);
 
   useEffect(() => {
     const map = mapRef.current;
