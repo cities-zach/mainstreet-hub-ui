@@ -30,3 +30,20 @@ test("P1 pages are authenticated routes in the shared app shell", async () => {
   assert.match(shell, /Document Library/);
   assert.match(shell, /Action Center/);
 });
+
+test("Document Library owns FRED indexing status and retry", async () => {
+  const page = await source("src/pages/DocumentLibrary.jsx");
+  assert.match(page, /Available to FRED/);
+  assert.match(page, /FRED indexing failed/);
+  assert.match(page, /documents\/\$\{document\.id\}\/reindex/);
+  assert.match(page, /automatically made searchable by FRED/);
+});
+
+test("RAGTime is removed from routes, navigation, and dashboard", async () => {
+  const sources = await Promise.all([
+    "src/App.jsx", "src/components/layout/AppShell.jsx", "src/pages/Dashboard.jsx",
+  ].map(source));
+  for (const content of sources) {
+    assert.doesNotMatch(content, /RAGTime|\/ragtime/i);
+  }
+});

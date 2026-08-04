@@ -11,7 +11,6 @@ import {
   ClipboardList,
   LineChart,
   Mic,
-  BookOpen,
   Sparkles,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -145,13 +144,6 @@ export default function Dashboard({ me }) {
       icon: Mic,
       url: "/meeting-notes",
       color: "#10b981",
-    },
-    {
-      title: "RAGTime",
-      description: "Manage the knowledge base that powers Fred.",
-      icon: BookOpen,
-      url: "/ragtime",
-      color: "#f97316",
     },
   ];
 

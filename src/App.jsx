@@ -41,7 +41,6 @@ import FundraisingPublic from "@/pages/FundraisingPublic";
 import Contests from "@/pages/Contests";
 import ContestPublic from "@/pages/ContestPublic";
 import InvestorTrack from "@/pages/InvestorTrack";
-import RAGTime from "@/pages/RAGTime";
 
 /* ---------- INVENTORY ---------- */
 import SupplyStop from "@/pages/SupplyStop";
@@ -251,9 +250,6 @@ function AppInner() {
           <Route path="/fundraising" element={<Fundraising />} />
           <Route path="/contests" element={<Contests />} />
           <Route path="/investors" element={<InvestorTrack />} />
-
-          {/* ---------- RAGTIME ---------- */}
-          <Route path="/ragtime" element={<RAGTime />} />
 
           {/* ---------- SUPPLY ---------- */}
           <Route path="/supplystop" element={<SupplyStop />} />
