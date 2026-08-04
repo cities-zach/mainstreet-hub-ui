@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, Archive, Download, FileText, History, Pencil, Plus, RotateCcw, Search, Upload,
+  AlertTriangle, Archive, BrainCircuit, Download, FileText, History, Pencil, Plus, RefreshCw,
+  RotateCcw, Search, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +29,26 @@ function formatBytes(value) {
 
 function tagsFromInput(value) {
   return String(value || "").split(",").map((tag) => tag.trim()).filter(Boolean);
+}
+
+const KNOWLEDGE_STATUS = {
+  pending: { label: "Waiting for FRED indexing", className: "border-amber-300 text-amber-700 dark:text-amber-300" },
+  processing: { label: "Indexing for FRED", className: "border-blue-300 text-blue-700 dark:text-blue-300" },
+  ready: { label: "Available to FRED", className: "border-emerald-300 text-emerald-700 dark:text-emerald-300" },
+  failed: { label: "FRED indexing failed", className: "border-red-300 text-red-700 dark:text-red-300" },
+  unsupported: { label: "Not searchable by FRED", className: "border-slate-300 text-slate-600 dark:text-slate-300" },
+};
+
+function KnowledgeStatus({ status, error }) {
+  const metadata = KNOWLEDGE_STATUS[status] || KNOWLEDGE_STATUS.pending;
+  return (
+    <div className="space-y-1">
+      <Badge variant="outline" className={`gap-1.5 ${metadata.className}`}>
+        <BrainCircuit className="h-3.5 w-3.5" /> {metadata.label}
+      </Badge>
+      {error && <p className="max-w-md text-xs text-red-600 dark:text-red-300">{error}</p>}
+    </div>
+  );
 }
 
 function DocumentForm({ value, setValue, requireFile = false, onSubmit, pending, submitLabel }) {
@@ -170,6 +191,16 @@ export default function DocumentLibrary() {
     onError: (error) => toast.error(error.message || "Version upload failed"),
   });
 
+  const reindexMutation = useMutation({
+    mutationFn: (document) => apiFetch(`/documents/${document.id}/reindex`, { method: "POST" }),
+    onSuccess: (_result, document) => {
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ["document-versions", document.id] });
+      toast.success("Document is available to FRED");
+    },
+    onError: (error) => toast.error(error.message || "FRED indexing failed"),
+  });
+
   const openFile = async (fileId) => {
     const popup = window.open("", "_blank", "noopener,noreferrer");
     try {
@@ -193,7 +224,7 @@ export default function DocumentLibrary() {
             <h1 className="flex items-center gap-3 text-4xl font-bold text-[#2d4650] dark:text-slate-100">
               <FileText className="h-10 w-10" /> Document Library
             </h1>
-            <p className="mt-2 text-slate-500">Searchable, versioned files secured to your organization.</p>
+            <p className="mt-2 text-slate-500">Searchable, versioned files secured to your organization and used by FRED.</p>
           </div>
           <Button className="gap-2 bg-[#835879] text-white hover:bg-[#6d4a64]" onClick={() => setUploadOpen(true)}>
             <Plus className="h-4 w-4" /> Upload document
@@ -235,6 +266,20 @@ export default function DocumentLibrary() {
                 <CardContent className="space-y-4">
                   {document.description && <p className="line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{document.description}</p>}
                   <div className="flex flex-wrap gap-1.5">{(document.tags || []).map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}</div>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <KnowledgeStatus status={document.knowledge_status} error={document.knowledge_error} />
+                    {document.can_manage && ["failed", "pending"].includes(document.knowledge_status) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        disabled={reindexMutation.isPending && reindexMutation.variables?.id === document.id}
+                        onClick={() => reindexMutation.mutate(document)}
+                      >
+                        <RefreshCw className="h-4 w-4" /> Retry FRED indexing
+                      </Button>
+                    )}
+                  </div>
                   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                     <Button size="sm" className="gap-2" onClick={() => openFile(document.file_id)}><Download className="h-4 w-4" /> Open</Button>
                     <Button size="sm" variant="outline" className="gap-2" onClick={() => setVersionDocument(document)}><History className="h-4 w-4" /> {document.version_count} version{document.version_count === 1 ? "" : "s"}</Button>
@@ -252,7 +297,7 @@ export default function DocumentLibrary() {
       </div>
 
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Upload a document</DialogTitle><DialogDescription>The file stays private and is shared only within your organization.</DialogDescription></DialogHeader><DocumentForm value={uploadForm} setValue={setUploadForm} requireFile onSubmit={(event) => { event.preventDefault(); uploadMutation.mutate(uploadForm); }} pending={uploadMutation.isPending} submitLabel="Upload" /></DialogContent>
+        <DialogContent><DialogHeader><DialogTitle>Upload a document</DialogTitle><DialogDescription>The file stays private within your organization. PDF, DOCX, TXT, Markdown, CSV, JSON, XML, and HTML files are automatically made searchable by FRED.</DialogDescription></DialogHeader><DocumentForm value={uploadForm} setValue={setUploadForm} requireFile onSubmit={(event) => { event.preventDefault(); uploadMutation.mutate(uploadForm); }} pending={uploadMutation.isPending} submitLabel="Upload" /></DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(editDocument)} onOpenChange={(open) => !open && setEditDocument(null)}>
@@ -271,7 +316,7 @@ export default function DocumentLibrary() {
             </div>}
             {versionsQuery.isLoading ? <p className="text-sm text-slate-500">Loading history…</p> : (versionsQuery.data || []).map((version) => (
               <div key={version.id} className="flex items-center justify-between gap-4 rounded-lg border p-3">
-                <div><p className="font-medium">Version {version.version_number}: {version.file_name}</p><p className="text-xs text-slate-500">{version.notes || "No version note"} · {formatBytes(version.byte_size)}</p></div>
+                <div className="space-y-2"><div><p className="font-medium">Version {version.version_number}: {version.file_name}</p><p className="text-xs text-slate-500">{version.notes || "No version note"} · {formatBytes(version.byte_size)}</p></div><KnowledgeStatus status={version.knowledge_status} error={version.knowledge_error} /></div>
                 <Button size="sm" variant="outline" onClick={() => openFile(version.file_id)}><Download className="mr-2 h-4 w-4" /> Open</Button>
               </div>
             ))}

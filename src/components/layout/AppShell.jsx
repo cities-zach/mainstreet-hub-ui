@@ -9,7 +9,6 @@ import {
   PanelLeft,
   Map,
   Mic,
-  BookOpen,
   Package,
   Settings,
   Store,
@@ -63,7 +62,6 @@ export default function AppShell({ me }) {
           { label: "PhotoBooth", to: "/photobooth", icon: Camera },
         ]
       : []),
-    { label: "RAGTime", to: "/ragtime", icon: BookOpen },
   ];
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
