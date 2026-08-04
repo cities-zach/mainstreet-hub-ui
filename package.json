@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:p0": "node --test tests/p0-ui.test.js",
+    "test:p1": "node --test tests/p1-ui.test.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

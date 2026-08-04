@@ -21,6 +21,8 @@ import {
   Camera,
   Network,
   Route,
+  FileText,
+  Inbox,
 } from "lucide-react";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
@@ -37,8 +39,10 @@ export default function AppShell({ me }) {
     me?.user?.app_role === "super_admin";
   const navItems = [
     { label: "Home", to: "/", icon: Home },
+    { label: "Action Center", to: "/action-center", icon: Inbox },
     { label: "MasterPlanner", to: "/master-planner", icon: Map },
     { label: "NoteTaker", to: "/meeting-notes", icon: Mic },
+    { label: "Document Library", to: "/documents", icon: FileText },
     { label: "MarketStreet", to: "/marketstreet", icon: Store },
     { label: "TaskMaster", to: "/taskmaster", icon: CheckSquare },
     { label: "PocketBook", to: "/pocketbook", icon: DollarSign },

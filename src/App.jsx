@@ -10,6 +10,8 @@ import Dashboard from "@/pages/Dashboard";
 import MasterPlanner from "@/pages/MasterPlanner";
 import EventPlanForm from "@/pages/EventPlanForm";
 import MeetingNotes from "@/pages/MeetingNotes";
+import DocumentLibrary from "@/pages/DocumentLibrary";
+import ActionCenter from "@/pages/ActionCenter";
 
 /* ---------- BUDGET / FINANCE ---------- */
 import PocketBook from "@/pages/PocketBook";
@@ -213,6 +215,8 @@ function AppInner() {
           <Route path="/master-planner" element={<MasterPlanner />} />
           <Route path="/event-plan" element={<EventPlanForm />} />
           <Route path="/meeting-notes" element={<MeetingNotes />} />
+          <Route path="/documents" element={<DocumentLibrary />} />
+          <Route path="/action-center" element={<ActionCenter />} />
 
           {/* ---------- BUDGET ---------- */}
           <Route path="/pocketbook" element={<PocketBook />} />
