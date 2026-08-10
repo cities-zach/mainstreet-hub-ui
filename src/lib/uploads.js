@@ -22,6 +22,7 @@ export async function uploadFile({
 }
 
 export const uploadPublicFile = uploadFile;
+export const uploadPrivateFile = (options) => uploadFile({ ...options, visibility: "private" });
 
 export function secureFileId(url) {
   return String(url || "").match(/\/files\/([0-9a-f-]{36})\/download(?:\?|$)/i)?.[1] || null;

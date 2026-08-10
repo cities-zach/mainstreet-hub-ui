@@ -47,3 +47,20 @@ test("RAGTime is removed from routes, navigation, and dashboard", async () => {
     assert.doesNotMatch(content, /RAGTime|\/ragtime/i);
   }
 });
+
+test("Document Library feature upgrade exposes folders, bulk upload, ACLs, and signing", async () => {
+  const page = await source("src/pages/DocumentLibrary.jsx");
+  const permissions = await source("src/components/documents/PermissionsDialog.jsx");
+  const signatures = await source("src/components/documents/SignatureDialogs.jsx");
+  assert.match(page, /apiFetch\("\/document-folders"/);
+  assert.match(page, /type="file" multiple/);
+  assert.match(page, /documents\/bulk\/move/);
+  assert.match(page, /PermissionsDialog/);
+  assert.match(page, /SignatureInboxDialog/);
+  assert.match(permissions, /inherit_folder_permissions/);
+  assert.match(permissions, /Allow FRED to use/);
+  assert.match(signatures, /signature-requests/);
+  assert.match(signatures, /Return signed copy/);
+  assert.match(page, /signature_request/);
+  assert.match(signatures, /initialRequestId/);
+});

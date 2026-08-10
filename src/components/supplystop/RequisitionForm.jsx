@@ -5,12 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api";
 
-export default function RequisitionForm({ inventory = [], onSuccess, onCancel }) {
+export default function RequisitionForm({ inventory = [], initialItemId = null, onSuccess, onCancel }) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [neededBy, setNeededBy] = useState("");
-  const [selectedItems, setSelectedItems] = useState({});
+  const [selectedItems, setSelectedItems] = useState(() => initialItemId ? { [initialItemId]: 1 } : {});
 
   const itemsArray = useMemo(
     () =>

@@ -1,27 +1,55 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   addChatChannelMembers,
+  apiFetch,
+  createTaskFromChat,
   createChatChannel,
   createChatMessage,
   deleteChatChannel,
+  deleteChatMessage,
+  getChatBookmarks,
   getChatChannelMembers,
   getChatChannels,
   getChatMessages,
+  getChatPins,
+  getChatThread,
   getUserRoster,
   markChatChannelRead,
   removeChatChannelMember,
+  searchChat,
+  toggleChatBookmark,
+  toggleChatPin,
+  updateChatChannel,
+  updateChatMessage,
+  updateChatPreferences,
   toggleChatReaction
 } from "@/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { uploadPublicFile } from "@/lib/uploads";
+import { secureFileId, uploadPrivateFile } from "@/lib/uploads";
 import SecureFileLink from "@/components/files/SecureFileLink";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Bell, Bookmark, FileText, ListTodo, MessageCircle, Pencil, Pin, Search, Trash2, Users } from "lucide-react";
 
 const REACTION_OPTIONS = ["👍", "🎉", "❤️", "😂"];
+
+function ChatAttachment({ file, mine }) {
+  const fileId = secureFileId(file.file_url);
+  const isImage = String(file.file_type || "").startsWith("image/");
+  const previewQuery = useQuery({
+    queryKey: ["chat-attachment-preview", fileId],
+    queryFn: () => apiFetch(`/files/${fileId}/url`),
+    enabled: Boolean(fileId && isImage),
+    staleTime: 4 * 60 * 1000,
+  });
+  return <div><SecureFileLink href={file.file_url} target="_blank" rel="noreferrer" className={`block text-xs underline ${mine ? "text-white" : "text-[#835879]"}`}>{file.file_name || "Attachment"}</SecureFileLink>{previewQuery.data?.url && <img src={previewQuery.data.url} alt={file.file_name || "Chat attachment preview"} className="mt-2 max-h-52 rounded-md object-contain" />}</div>;
+}
 
 export default function Chat() {
   const queryClient = useQueryClient();
@@ -36,6 +64,21 @@ export default function Chat() {
   const [channelType, setChannelType] = useState("channel");
   const [channelName, setChannelName] = useState("");
   const [channelMembers, setChannelMembers] = useState([]);
+  const [channelQuery, setChannelQuery] = useState("");
+  const [channelSection, setChannelSection] = useState("channels");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedThreadId, setSelectedThreadId] = useState(null);
+  const [threadReply, setThreadReply] = useState("");
+  const [mentionIds, setMentionIds] = useState([]);
+  const [showMentions, setShowMentions] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [showPins, setShowPins] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editBody, setEditBody] = useState("");
+  const [topicDraft, setTopicDraft] = useState("");
 
   const { data: channels = [] } = useQuery({
     queryKey: ["chat-channels"],
@@ -47,17 +90,28 @@ export default function Chat() {
     queryFn: getUserRoster
   });
 
-  const { data: messagesPayload } = useQuery({
+  const messagesQuery = useInfiniteQuery({
     queryKey: ["chat-messages", selectedChannelId],
-    queryFn: () => getChatMessages(selectedChannelId),
+    queryFn: ({ pageParam }) => getChatMessages(selectedChannelId, { limit: 50, before: pageParam || undefined }),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.next_before : undefined,
     enabled: !!selectedChannelId
   });
+  const messagesPayload = useMemo(() => ({
+    messages: (messagesQuery.data?.pages || []).flatMap((page) => page.messages || []),
+    attachments: (messagesQuery.data?.pages || []).flatMap((page) => page.attachments || []),
+    reactions: (messagesQuery.data?.pages || []).flatMap((page) => page.reactions || []),
+  }), [messagesQuery.data?.pages]);
 
   const { data: channelMemberList = [] } = useQuery({
     queryKey: ["chat-members", selectedChannelId],
     queryFn: () => getChatChannelMembers(selectedChannelId),
     enabled: !!selectedChannelId
   });
+  const threadQuery = useQuery({ queryKey: ["chat-thread", selectedChannelId, selectedThreadId], queryFn: () => getChatThread(selectedChannelId, selectedThreadId), enabled: Boolean(selectedChannelId && selectedThreadId) });
+  const pinsQuery = useQuery({ queryKey: ["chat-pins", selectedChannelId], queryFn: () => getChatPins(selectedChannelId), enabled: Boolean(selectedChannelId && showPins) });
+  const bookmarksQuery = useQuery({ queryKey: ["chat-bookmarks"], queryFn: getChatBookmarks, enabled: showBookmarks });
+  const libraryQuery = useQuery({ queryKey: ["documents", "chat-attachments"], queryFn: () => apiFetch("/documents?status=active&limit=100"), enabled: showLibrary });
 
   const messages = useMemo(
     () => messagesPayload?.messages || [],
@@ -131,13 +185,14 @@ export default function Chat() {
     if (!file) return;
     try {
       setUploading(true);
-      const uploaded = await uploadPublicFile({
+      const uploaded = await uploadPrivateFile({
         purpose: "chat-attachment",
         file
       });
       setAttachments((prev) => [
         ...prev,
         {
+          file_id: uploaded.file_id,
           file_url: uploaded.file_url,
           file_name: uploaded.file_name || file.name,
           file_type: file.type,
@@ -162,10 +217,12 @@ export default function Chat() {
       await createChatMessage(selectedChannelId, {
         body: messageText,
         attachments,
+        mention_user_ids: mentionIds,
         mentions_fred: wantsFred
       });
       setMessageText("");
       setAttachments([]);
+      setMentionIds([]);
       queryClient.invalidateQueries({ queryKey: ["chat-messages", selectedChannelId] });
       queryClient.invalidateQueries({ queryKey: ["chat-channels"] });
       if (wantsFred) {
@@ -219,14 +276,65 @@ export default function Chat() {
     }
   };
 
+  const handleSearch = async () => {
+    if (searchQuery.trim().length < 2) return;
+    try { setSearching(true); setSearchResults(await searchChat(searchQuery.trim())); }
+    catch (error) { toast.error(error.message || "Chat search failed"); }
+    finally { setSearching(false); }
+  };
+
+  const attachLibraryDocument = (document) => {
+    setAttachments((current) => [...current, {
+      library_document_id: document.id, library_version_id: document.version_id,
+      file_name: document.file_name || document.title, file_type: document.mime_type,
+      file_size: document.file_size,
+    }]);
+    setShowLibrary(false);
+  };
+
+  const refreshMessages = () => {
+    queryClient.invalidateQueries({ queryKey: ["chat-messages", selectedChannelId] });
+    queryClient.invalidateQueries({ queryKey: ["chat-thread", selectedChannelId] });
+    queryClient.invalidateQueries({ queryKey: ["chat-pins", selectedChannelId] });
+    queryClient.invalidateQueries({ queryKey: ["chat-bookmarks"] });
+  };
+
+  const handleEditMessage = async () => {
+    try { await updateChatMessage(editingMessage.id, editBody); setEditingMessage(null); setEditBody(""); refreshMessages(); toast.success("Message updated"); }
+    catch (error) { toast.error(error.message || "Message could not be updated"); }
+  };
+
+  const handleDeleteMessage = async (message) => {
+    if (!window.confirm("Delete this message? Its audit history will be retained.")) return;
+    try { await deleteChatMessage(message.id); refreshMessages(); toast.success("Message deleted"); }
+    catch (error) { toast.error(error.message || "Message could not be deleted"); }
+  };
+
+  const handleThreadReply = async () => {
+    if (!threadReply.trim()) return;
+    try { await createChatMessage(selectedChannelId, { body: threadReply, parent_message_id: selectedThreadId }); setThreadReply(""); refreshMessages(); }
+    catch (error) { toast.error(error.message || "Reply could not be sent"); }
+  };
+
+  const handlePreference = async (level) => {
+    try { await updateChatPreferences(selectedChannelId, level); queryClient.invalidateQueries({ queryKey: ["chat-channels"] }); toast.success("Channel notifications updated"); }
+    catch (error) { toast.error(error.message || "Notification preference could not be saved"); }
+  };
+
+  const handleTopicSave = async () => {
+    try { await updateChatChannel(selectedChannelId, { topic: topicDraft }); queryClient.invalidateQueries({ queryKey: ["chat-channels"] }); toast.success("Channel topic updated"); }
+    catch (error) { toast.error(error.message || "Channel topic could not be updated"); }
+  };
+
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId);
   const channelTitle = selectedChannel?.display_name || selectedChannel?.name || "Conversation";
-  const canEditMembers = !!selectedChannel;
-  const canDeleteChannel =
-    !!selectedChannel &&
-    (selectedChannel.channel_type === "dm" ||
-      me?.user?.role === "admin" ||
-      me?.user?.role === "super_admin");
+  const canEditMembers = Boolean(selectedChannel?.can_manage);
+  const canDeleteChannel = Boolean(selectedChannel?.can_manage);
+  const filteredChannels = useMemo(() => channels.filter((channel) => {
+    const sectionMatch = channelSection === "dms" ? channel.channel_type === "dm" : channel.channel_type !== "dm";
+    const label = channel.display_name || channel.name || "Direct message";
+    return sectionMatch && label.toLowerCase().includes(channelQuery.trim().toLowerCase());
+  }), [channels, channelQuery, channelSection]);
   const currentMemberIds = useMemo(
     () => new Set(channelMemberList.map((member) => member.id)),
     [channelMemberList]
@@ -334,9 +442,13 @@ export default function Chat() {
       <div className="max-w-6xl mx-auto grid md:grid-cols-[280px_1fr] gap-6">
         <Card className="bg-white/80">
           <CardHeader>
-            <CardTitle className="text-lg">Channels</CardTitle>
+            <CardTitle className="text-lg">Chat</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            <div className="flex gap-1 rounded-md bg-slate-100 p-1"><Button size="sm" className="flex-1" variant={channelSection === "channels" ? "default" : "ghost"} onClick={() => setChannelSection("channels")}><Users className="mr-1 h-4 w-4" /> Channels</Button><Button size="sm" className="flex-1" variant={channelSection === "dms" ? "default" : "ghost"} onClick={() => setChannelSection("dms")}><MessageCircle className="mr-1 h-4 w-4" /> DMs</Button></div>
+            <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" /><Input className="pl-8" value={channelQuery} onChange={(event) => setChannelQuery(event.target.value)} placeholder="Filter conversations" /></div>
+            <div className="flex gap-1"><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && handleSearch()} placeholder="Search all messages" /><Button size="icon" variant="outline" onClick={handleSearch} disabled={searching} aria-label="Search messages"><Search className="h-4 w-4" /></Button></div>
+            {searchResults.length > 0 && <div className="max-h-52 space-y-1 overflow-y-auto rounded-md border p-2"><div className="flex items-center justify-between text-xs font-medium"><span>Search results</span><button onClick={() => setSearchResults([])}>Clear</button></div>{searchResults.map((result) => <button key={result.id} className="block w-full rounded p-2 text-left text-xs hover:bg-slate-50" onClick={() => { setSelectedChannelId(result.channel_id); setSearchResults([]); }}><strong>{result.channel_name || (result.channel_type === "dm" ? "Direct message" : "Channel")}</strong><span className="mt-1 block line-clamp-2 text-slate-500">{result.body || result.file_names || "Attachment"}</span></button>)}</div>}
             <div className="flex items-center justify-between">
               <Button
                 variant="outline"
@@ -394,7 +506,7 @@ export default function Chat() {
             {channels.length === 0 && (
               <div className="text-sm text-slate-500">No channels yet.</div>
             )}
-            {channels.map((channel) => (
+            {filteredChannels.map((channel) => (
               <button
                 key={channel.id}
                 className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
@@ -421,6 +533,7 @@ export default function Chat() {
                     {channel.last_message}
                   </div>
                 )}
+                {channel.last_message_at && <div className="mt-1 text-[10px] text-slate-400">{new Date(channel.last_message_at).toLocaleString()}</div>}
               </button>
             ))}
           </CardContent>
@@ -431,6 +544,7 @@ export default function Chat() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="text-lg">{channelTitle}</CardTitle>
+                {selectedChannel?.topic && <p className="mt-1 text-sm text-slate-500">{selectedChannel.topic}</p>}
                 {memberList && (
                   <div className="text-xs text-slate-500">
                     Members: {memberList}
@@ -438,11 +552,14 @@ export default function Chat() {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {selectedChannel && <select aria-label="Channel notifications" className="rounded-md border bg-white px-2 py-1 text-xs" value={selectedChannel.notification_level || "all"} onChange={(event) => handlePreference(event.target.value)}><option value="all">All messages</option><option value="mentions">Mentions only</option><option value="muted">Muted</option></select>}
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowPins(true)} disabled={!selectedChannel}><Pin className="h-3.5 w-3.5" /> Pins</Button>
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowBookmarks(true)}><Bookmark className="h-3.5 w-3.5" /> Saved</Button>
                 {canEditMembers && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowEditMembers((prev) => !prev)}
+                    onClick={() => { setShowEditMembers((prev) => !prev); setTopicDraft(selectedChannel?.topic || ""); }}
                   >
                     {showEditMembers ? "Done" : "Edit members"}
                   </Button>
@@ -463,6 +580,7 @@ export default function Chat() {
           <CardContent className="space-y-4">
             {showEditMembers && (
               <div className="grid gap-3 rounded-lg border bg-slate-50 p-3 text-sm md:grid-cols-2">
+                <div className="space-y-2 md:col-span-2"><div className="font-medium">Channel topic</div><div className="flex gap-2"><Input value={topicDraft} onChange={(event) => setTopicDraft(event.target.value)} placeholder={selectedChannel?.topic || "What is this channel for?"} /><Button size="sm" onClick={handleTopicSave}>Save topic</Button></div></div>
                 <div className="space-y-2">
                   <div className="font-medium">Current members</div>
                   <div className="max-h-48 space-y-2 overflow-y-auto">
@@ -514,6 +632,7 @@ export default function Chat() {
                 </div>
               </div>
             )}
+            {messagesQuery.hasNextPage && <Button variant="outline" size="sm" className="w-full" disabled={messagesQuery.isFetchingNextPage} onClick={() => messagesQuery.fetchNextPage()}>{messagesQuery.isFetchingNextPage ? "Loading…" : "Load older messages"}</Button>}
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {messages.length === 0 && (
                 <div className="text-sm text-slate-500">No messages yet.</div>
@@ -559,21 +678,10 @@ export default function Chat() {
                               }`}
                             >
                               {msg.body && <div className="whitespace-pre-wrap">{msg.body}</div>}
+                              {msg.edited_at && <span className={`mt-1 block text-[10px] ${mine ? "text-white/70" : "text-slate-400"}`}>(edited)</span>}
                               {files.length > 0 && (
                                 <div className="mt-2 space-y-1">
-                                  {files.map((file) => (
-                                    <SecureFileLink
-                                      key={file.id}
-                                      href={file.file_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className={`block text-xs underline ${
-                                        mine ? "text-white" : "text-[#835879]"
-                                      }`}
-                                    >
-                                      {file.file_name || "Attachment"}
-                                    </SecureFileLink>
-                                  ))}
+                                  {files.map((file) => <ChatAttachment key={file.id} file={file} mine={mine} />)}
                                 </div>
                               )}
                             </div>
@@ -597,6 +705,11 @@ export default function Chat() {
                                   </button>
                                 );
                               })}
+                              <button className="rounded-full border px-2 py-0.5" onClick={() => setSelectedThreadId(msg.id)}><MessageCircle className="mr-1 inline h-3 w-3" />Reply{Number(msg.reply_count) ? ` (${msg.reply_count})` : ""}</button>
+                              <button className={`rounded-full border px-2 py-0.5 ${msg.is_pinned ? "bg-amber-50" : ""}`} onClick={async () => { try { await toggleChatPin(msg.id); refreshMessages(); } catch (error) { toast.error(error.message); } }}><Pin className="mr-1 inline h-3 w-3" />{msg.is_pinned ? "Pinned" : "Pin"}</button>
+                              <button className={`rounded-full border px-2 py-0.5 ${msg.is_bookmarked ? "bg-blue-50" : ""}`} onClick={async () => { try { await toggleChatBookmark(msg.id); refreshMessages(); } catch (error) { toast.error(error.message); } }}><Bookmark className="mr-1 inline h-3 w-3" />{msg.is_bookmarked ? "Saved" : "Save"}</button>
+                              <button className="rounded-full border px-2 py-0.5" onClick={async () => { try { await createTaskFromChat(msg.id); toast.success("Task created in TaskMaster"); } catch (error) { toast.error(error.message); } }}><ListTodo className="mr-1 inline h-3 w-3" />Task</button>
+                              {mine && <><button className="rounded-full border px-2 py-0.5" onClick={() => { setEditingMessage(msg); setEditBody(msg.body || ""); }}><Pencil className="mr-1 inline h-3 w-3" />Edit</button><button className="rounded-full border px-2 py-0.5 text-red-600" onClick={() => handleDeleteMessage(msg)}><Trash2 className="mr-1 inline h-3 w-3" />Delete</button></>}
                             </div>
                           </div>
                         );
@@ -608,10 +721,11 @@ export default function Chat() {
             </div>
 
             <div className="space-y-2">
-              <Input
+              <Textarea
                 value={messageText}
                 onChange={(event) => setMessageText(event.target.value)}
                 placeholder="Type a message... (use @fred to ask for help)"
+                rows={3}
               />
               <div className="flex flex-wrap items-center gap-2">
                 <input
@@ -628,17 +742,28 @@ export default function Chat() {
                 >
                   {uploading ? "Uploading..." : "Add attachment"}
                 </Button>
+                <Button type="button" variant="outline" className="gap-1" onClick={() => setShowLibrary(true)}><FileText className="h-4 w-4" /> Library</Button>
+                <Button type="button" variant="outline" className="gap-1" onClick={() => setShowMentions((value) => !value)}><Bell className="h-4 w-4" /> Mention</Button>
                 <Button onClick={handleSend}>Send</Button>
               </div>
+              {showMentions && <div className="flex flex-wrap gap-2 rounded-md border p-2">{channelMemberList.filter((member) => member.id !== me?.user?.id).map((member) => <label key={member.id} className={`cursor-pointer rounded-full border px-2 py-1 text-xs ${mentionIds.includes(member.id) ? "bg-[#835879] text-white" : ""}`}><input type="checkbox" className="sr-only" checked={mentionIds.includes(member.id)} onChange={(event) => setMentionIds(event.target.checked ? [...mentionIds, member.id] : mentionIds.filter((id) => id !== member.id))} />@{member.full_name || member.email}</label>)}</div>}
               {attachments.length > 0 && (
-                <div className="text-xs text-slate-500">
-                  {attachments.length} attachment(s) ready to send.
-                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-slate-500">{attachments.map((attachment, index) => <Badge key={`${attachment.file_id || attachment.library_version_id}-${index}`} variant="outline" className="gap-2">{attachment.file_name || "Attachment"}<button aria-label={`Remove ${attachment.file_name || "attachment"}`} onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></Badge>)}</div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showLibrary} onOpenChange={setShowLibrary}><DialogContent className="max-h-[80vh] overflow-y-auto"><DialogHeader><DialogTitle>Attach from Document Library</DialogTitle><DialogDescription>Only documents you can access are shown. Recipients still need Library permission to download the exact version.</DialogDescription></DialogHeader><div className="space-y-2">{(libraryQuery.data?.documents || []).map((document) => <button key={document.id} className="flex w-full items-center justify-between rounded-md border p-3 text-left hover:bg-slate-50" onClick={() => attachLibraryDocument(document)}><span><strong>{document.title}</strong><span className="block text-xs text-slate-500">Version {document.version_number}</span></span><FileText className="h-4 w-4" /></button>)}</div></DialogContent></Dialog>
+
+      <Dialog open={Boolean(selectedThreadId)} onOpenChange={(open) => !open && setSelectedThreadId(null)}><DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Thread</DialogTitle><DialogDescription>Keep focused replies together without interrupting the main channel.</DialogDescription></DialogHeader><div className="space-y-3">{(threadQuery.data || []).map((message, index) => <div key={message.id} className={`rounded-lg border p-3 ${index === 0 ? "bg-slate-50" : "ml-5"}`}><div className="text-xs font-medium text-slate-500">{message.author_type === "fred" ? "FRED" : message.full_name || message.email || "User"}</div><p className="mt-1 whitespace-pre-wrap text-sm">{message.body}</p><time className="mt-2 block text-[10px] text-slate-400">{new Date(message.created_at).toLocaleString()}</time></div>)}<Textarea value={threadReply} onChange={(event) => setThreadReply(event.target.value)} placeholder="Reply in thread" /><Button disabled={!threadReply.trim()} onClick={handleThreadReply}>Reply</Button></div></DialogContent></Dialog>
+
+      <Dialog open={showPins} onOpenChange={setShowPins}><DialogContent><DialogHeader><DialogTitle>Pinned messages</DialogTitle><DialogDescription>Important information saved for everyone in this channel.</DialogDescription></DialogHeader><div className="space-y-2">{(pinsQuery.data || []).map((pin) => <div key={pin.id} className="rounded-md border p-3"><p className="text-sm">{pin.body}</p><p className="mt-1 text-xs text-slate-500">{pin.full_name || pin.email || "User"}</p></div>)}{!pinsQuery.isLoading && !(pinsQuery.data || []).length && <p className="text-sm text-slate-500">No pinned messages.</p>}</div></DialogContent></Dialog>
+
+      <Dialog open={showBookmarks} onOpenChange={setShowBookmarks}><DialogContent><DialogHeader><DialogTitle>Saved messages</DialogTitle><DialogDescription>Your private message bookmarks across Chat.</DialogDescription></DialogHeader><div className="space-y-2">{(bookmarksQuery.data || []).map((bookmark) => <button key={bookmark.id} className="block w-full rounded-md border p-3 text-left" onClick={() => { setSelectedChannelId(bookmark.channel_id); setShowBookmarks(false); }}><p className="text-sm">{bookmark.body}</p><p className="mt-1 text-xs text-slate-500">{bookmark.channel_name || "Direct message"}</p></button>)}{!bookmarksQuery.isLoading && !(bookmarksQuery.data || []).length && <p className="text-sm text-slate-500">No saved messages.</p>}</div></DialogContent></Dialog>
+
+      <Dialog open={Boolean(editingMessage)} onOpenChange={(open) => !open && setEditingMessage(null)}><DialogContent><DialogHeader><DialogTitle>Edit message</DialogTitle><DialogDescription>The edited timestamp will remain visible.</DialogDescription></DialogHeader><Textarea rows={5} value={editBody} onChange={(event) => setEditBody(event.target.value)} /><Button disabled={!editBody.trim()} onClick={handleEditMessage}>Save edit</Button></DialogContent></Dialog>
     </div>
   );
 }
