@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle, Archive, BrainCircuit, Download, FileText, History, Pencil, Plus, RefreshCw,
-  RotateCcw, Search, Upload,
+  AlertTriangle, Archive, BrainCircuit, Download, FileSignature, FileText, Folder, FolderPlus,
+  History, Pencil, Plus, RefreshCw, RotateCcw, Search, Shield, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import PermissionsDialog from "@/components/documents/PermissionsDialog";
+import { SignatureInboxDialog, SignatureRequestDialog } from "@/components/documents/SignatureDialogs";
 
 const EMPTY_FORM = { title: "", description: "", category: "", tags: "", file: null };
 
@@ -51,12 +54,19 @@ function KnowledgeStatus({ status, error }) {
   );
 }
 
-function DocumentForm({ value, setValue, requireFile = false, onSubmit, pending, submitLabel }) {
+function DocumentForm({ value, setValue, folders = [], requireFile = false, onSubmit, pending, submitLabel }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label>Title *</Label>
         <Input value={value.title} onChange={(event) => setValue({ ...value, title: event.target.value })} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Folder</Label>
+        <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={value.folder_id || ""} onChange={(event) => setValue({ ...value, folder_id: event.target.value })}>
+          <option value="">Unfiled</option>
+          {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+        </select>
       </div>
       <div className="space-y-2">
         <Label>Description</Label>
@@ -89,11 +99,26 @@ function DocumentForm({ value, setValue, requireFile = false, onSubmit, pending,
 
 export default function DocumentLibrary() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedSignatureRequestId = searchParams.get("signature_request");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("active");
+  const [folderId, setFolderId] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadForm, setUploadForm] = useState(EMPTY_FORM);
+  const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploadResults, setUploadResults] = useState([]);
+  const [uploadForm, setUploadForm] = useState({ ...EMPTY_FORM, folder_id: "", fred_enabled: true });
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [folderEditTarget, setFolderEditTarget] = useState(null);
+  const [folderEditName, setFolderEditName] = useState("");
+  const [permissionsTarget, setPermissionsTarget] = useState(null);
+  const [permissionsType, setPermissionsType] = useState("document");
+  const [signatureDocument, setSignatureDocument] = useState(null);
+  const [signatureInboxOpen, setSignatureInboxOpen] = useState(Boolean(linkedSignatureRequestId));
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [moveFolderId, setMoveFolderId] = useState("");
   const [editDocument, setEditDocument] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [versionDocument, setVersionDocument] = useState(null);
@@ -104,8 +129,9 @@ export default function DocumentLibrary() {
     const next = new URLSearchParams({ status, limit: "100" });
     if (query.trim()) next.set("query", query.trim());
     if (category) next.set("category", category);
+    if (folderId) next.set("folder_id", folderId);
     return next.toString();
-  }, [category, query, status]);
+  }, [category, folderId, query, status]);
 
   const documentsQuery = useQuery({
     queryKey: ["documents", params],
@@ -114,6 +140,14 @@ export default function DocumentLibrary() {
   const categoriesQuery = useQuery({
     queryKey: ["document-categories"],
     queryFn: () => apiFetch("/documents/categories"),
+  });
+  const foldersQuery = useQuery({
+    queryKey: ["document-folders"],
+    queryFn: () => apiFetch("/document-folders"),
+  });
+  const signatureInboxQuery = useQuery({
+    queryKey: ["signature-requests", "mine"],
+    queryFn: () => apiFetch("/document-signature-requests"),
   });
   const versionsQuery = useQuery({
     queryKey: ["document-versions", versionDocument?.id],
@@ -124,26 +158,70 @@ export default function DocumentLibrary() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["documents"] });
     queryClient.invalidateQueries({ queryKey: ["document-categories"] });
+    queryClient.invalidateQueries({ queryKey: ["document-folders"] });
   };
 
   const uploadMutation = useMutation({
-    mutationFn: async (form) => {
-      const body = new FormData();
-      body.append("title", form.title.trim());
-      body.append("description", form.description.trim());
-      body.append("category", form.category.trim());
-      body.append("tags", JSON.stringify(tagsFromInput(form.tags)));
-      body.append("links", "[]");
-      body.append("file", form.file, form.file.name);
-      return apiFetch("/documents", { method: "POST", body });
+    mutationFn: async () => {
+      const results = [];
+      for (const file of uploadFiles) {
+        const body = new FormData();
+        body.append("title", file.name.replace(/\.[^.]+$/, ""));
+        body.append("description", uploadForm.description.trim());
+        body.append("category", uploadForm.category.trim());
+        body.append("tags", JSON.stringify(tagsFromInput(uploadForm.tags)));
+        body.append("links", "[]");
+        body.append("folder_id", uploadForm.folder_id || "");
+        body.append("inherit_folder_permissions", uploadForm.folder_id ? "true" : "false");
+        body.append("fred_enabled", uploadForm.fred_enabled ? "true" : "false");
+        body.append("file", file, file.name);
+        try {
+          results.push({ file: file.name, ok: true, value: await apiFetch("/documents", { method: "POST", body }) });
+        } catch (error) {
+          results.push({ file: file.name, ok: false, error: error.message });
+        }
+      }
+      return results;
     },
-    onSuccess: () => {
+    onSuccess: (results) => {
       refresh();
-      setUploadForm(EMPTY_FORM);
-      setUploadOpen(false);
-      toast.success("Document uploaded");
+      setUploadResults(results);
+      const failures = results.filter((result) => !result.ok);
+      if (failures.length) toast.error(`${failures.length} of ${results.length} files could not be uploaded`);
+      else { toast.success(`${results.length} document${results.length === 1 ? "" : "s"} uploaded`); setUploadOpen(false); }
+      setUploadFiles([]);
     },
     onError: (error) => toast.error(error.message || "Document upload failed"),
+  });
+
+  const createFolderMutation = useMutation({
+    mutationFn: () => apiFetch("/document-folders", {
+      method: "POST",
+      body: JSON.stringify({ name: folderName.trim(), fred_enabled: true }),
+    }),
+    onSuccess: () => {
+      refresh(); setFolderName(""); setFolderOpen(false); toast.success("Folder created");
+    },
+    onError: (error) => toast.error(error.message || "Folder could not be created"),
+  });
+
+  const editFolderMutation = useMutation({
+    mutationFn: ({ status: nextStatus } = {}) => apiFetch(`/document-folders/${folderEditTarget.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(nextStatus ? { status: nextStatus } : { name: folderEditName.trim() }),
+    }),
+    onSuccess: () => {
+      refresh(); setFolderEditTarget(null); toast.success("Folder updated");
+    },
+    onError: (error) => toast.error(error.message || "Folder could not be updated"),
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: () => apiFetch("/documents/bulk/move", {
+      method: "POST", body: JSON.stringify({ document_ids: selectedIds, folder_id: moveFolderId || null }),
+    }),
+    onSuccess: () => { refresh(); setSelectedIds([]); toast.success("Documents moved"); },
+    onError: (error) => toast.error(error.message || "Documents could not be moved"),
   });
 
   const editMutation = useMutation({
@@ -152,6 +230,7 @@ export default function DocumentLibrary() {
       body: JSON.stringify({
         title: form.title.trim(), description: form.description.trim() || null,
         category: form.category.trim() || null, tags: tagsFromInput(form.tags),
+        folder_id: form.folder_id || null,
       }),
     }),
     onSuccess: () => {
@@ -215,6 +294,8 @@ export default function DocumentLibrary() {
 
   const documents = documentsQuery.data?.items || [];
   const categories = categoriesQuery.data || [];
+  const folders = foldersQuery.data || [];
+  const pendingSignatures = (signatureInboxQuery.data || []).filter((request) => request.recipient_status === "pending").length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 dark:from-slate-950 dark:to-slate-900 md:p-8">
@@ -226,10 +307,24 @@ export default function DocumentLibrary() {
             </h1>
             <p className="mt-2 text-slate-500">Searchable, versioned files secured to your organization and used by FRED.</p>
           </div>
-          <Button className="gap-2 bg-[#835879] text-white hover:bg-[#6d4a64]" onClick={() => setUploadOpen(true)}>
-            <Plus className="h-4 w-4" /> Upload document
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => setSignatureInboxOpen(true)}>
+              <FileSignature className="h-4 w-4" /> My signatures {pendingSignatures > 0 && <Badge>{pendingSignatures}</Badge>}
+            </Button>
+            <Button className="gap-2 bg-[#835879] text-white hover:bg-[#6d4a64]" onClick={() => setUploadOpen(true)}>
+              <Plus className="h-4 w-4" /> Upload documents
+            </Button>
+          </div>
         </div>
+
+        <Card>
+          <CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="flex items-center gap-2 text-lg"><Folder className="h-5 w-5" /> Folders</CardTitle><Button size="sm" variant="outline" className="gap-2" onClick={() => setFolderOpen(true)}><FolderPlus className="h-4 w-4" /> New folder</Button></div></CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button size="sm" variant={folderId === "" ? "default" : "outline"} onClick={() => setFolderId("")}>All documents</Button>
+            <Button size="sm" variant={folderId === "unfiled" ? "default" : "outline"} onClick={() => setFolderId("unfiled")}>Unfiled</Button>
+            {folders.map((folder) => <div key={folder.id} className="flex items-center rounded-md border"><Button size="sm" variant={folderId === folder.id ? "default" : "ghost"} className="rounded-r-none gap-2" onClick={() => setFolderId(folder.id)}><Folder className="h-3.5 w-3.5" /> {folder.name} ({folder.document_count})</Button>{folder.can_manage && <><Button size="icon" variant="ghost" className="h-8 w-8 rounded-none" aria-label={`Rename ${folder.name}`} onClick={() => { setFolderEditTarget(folder); setFolderEditName(folder.name); }}><Pencil className="h-3.5 w-3.5" /></Button><Button size="icon" variant="ghost" className="h-8 w-8 rounded-l-none" aria-label={`Manage ${folder.name} permissions`} onClick={() => { setPermissionsType("folder"); setPermissionsTarget(folder); }}><Shield className="h-3.5 w-3.5" /></Button></>}</div>)}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="grid gap-3 pt-6 md:grid-cols-[1fr_220px_auto]">
@@ -247,6 +342,8 @@ export default function DocumentLibrary() {
           </CardContent>
         </Card>
 
+        {selectedIds.length > 0 && <Card><CardContent className="flex flex-wrap items-center gap-3 py-4"><p className="text-sm font-medium">{selectedIds.length} selected</p><select className="rounded-md border bg-background px-3 py-2 text-sm" value={moveFolderId} onChange={(event) => setMoveFolderId(event.target.value)}><option value="">Move to Unfiled</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>Move to {folder.name}</option>)}</select><Button size="sm" onClick={() => moveMutation.mutate()} disabled={moveMutation.isPending}>Move selected</Button><Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button></CardContent></Card>}
+
         {documentsQuery.isError ? (
           <Card><CardContent className="py-16 text-center"><AlertTriangle className="mx-auto mb-3 h-9 w-9 text-red-500" /><p className="font-medium">Document Library could not be loaded.</p><Button className="mt-4" variant="outline" onClick={() => documentsQuery.refetch()}>Try again</Button></CardContent></Card>
         ) : documentsQuery.isLoading ? (
@@ -259,8 +356,8 @@ export default function DocumentLibrary() {
               <Card key={document.id} className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div><CardTitle className="text-lg">{document.title}</CardTitle><p className="mt-1 text-xs text-slate-500">{document.file_name} · {formatBytes(document.byte_size)}</p></div>
-                    {document.category && <Badge variant="secondary">{document.category}</Badge>}
+                    <div className="flex items-start gap-3"><input type="checkbox" className="mt-1" aria-label={`Select ${document.title}`} checked={selectedIds.includes(document.id)} onChange={(event) => setSelectedIds(event.target.checked ? [...selectedIds, document.id] : selectedIds.filter((id) => id !== document.id))} /><div><CardTitle className="text-lg">{document.title}</CardTitle><p className="mt-1 text-xs text-slate-500">{document.folder_name ? `${document.folder_name} · ` : ""}{document.file_name} · {formatBytes(document.byte_size)}</p></div></div>
+                    <div className="flex flex-wrap gap-1">{document.category && <Badge variant="secondary">{document.category}</Badge>}{document.fred_enabled === false && <Badge variant="outline">FRED off</Badge>}</div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -283,7 +380,9 @@ export default function DocumentLibrary() {
                   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                     <Button size="sm" className="gap-2" onClick={() => openFile(document.file_id)}><Download className="h-4 w-4" /> Open</Button>
                     <Button size="sm" variant="outline" className="gap-2" onClick={() => setVersionDocument(document)}><History className="h-4 w-4" /> {document.version_count} version{document.version_count === 1 ? "" : "s"}</Button>
-                    {document.can_manage && <Button size="sm" variant="ghost" className="gap-2" onClick={() => { setEditDocument(document); setEditForm({ title: document.title, description: document.description || "", category: document.category || "", tags: (document.tags || []).join(", "), file: null }); }}><Pencil className="h-4 w-4" /> Edit</Button>}
+                    {document.can_manage && <Button size="sm" variant="ghost" className="gap-2" onClick={() => { setEditDocument(document); setEditForm({ title: document.title, description: document.description || "", category: document.category || "", tags: (document.tags || []).join(", "), folder_id: document.folder_id || "", file: null }); }}><Pencil className="h-4 w-4" /> Edit</Button>}
+                    {document.can_manage && <Button size="sm" variant="ghost" className="gap-2" onClick={() => { setPermissionsType("document"); setPermissionsTarget(document); }}><Shield className="h-4 w-4" /> Access</Button>}
+                    {document.can_manage && <Button size="sm" variant="ghost" className="gap-2" onClick={() => setSignatureDocument(document)}><FileSignature className="h-4 w-4" /> Sign</Button>}
                     {document.can_manage && <Button size="sm" variant="ghost" className="ml-auto gap-2" onClick={() => archiveMutation.mutate({ document, nextStatus: document.status === "archived" ? "active" : "archived" })}>
                         {document.status === "archived" ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
                         {document.status === "archived" ? "Restore" : "Archive"}
@@ -297,11 +396,15 @@ export default function DocumentLibrary() {
       </div>
 
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Upload a document</DialogTitle><DialogDescription>The file stays private within your organization. PDF, DOCX, TXT, Markdown, CSV, JSON, XML, and HTML files are automatically made searchable by FRED.</DialogDescription></DialogHeader><DocumentForm value={uploadForm} setValue={setUploadForm} requireFile onSubmit={(event) => { event.preventDefault(); uploadMutation.mutate(uploadForm); }} pending={uploadMutation.isPending} submitLabel="Upload" /></DialogContent>
+        <DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Upload documents</DialogTitle><DialogDescription>Select multiple local files. Each becomes its own versioned document; supported text formats are automatically made searchable by FRED.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Files *</Label><Input type="file" multiple onChange={(event) => { setUploadFiles(Array.from(event.target.files || [])); setUploadResults([]); }} /><p className="text-xs text-slate-500">{uploadFiles.length ? `${uploadFiles.length} file${uploadFiles.length === 1 ? "" : "s"} selected` : "PDF, DOCX, TXT, Markdown, CSV, JSON, XML, HTML, and other library files."}</p></div><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label>Folder</Label><select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={uploadForm.folder_id} onChange={(event) => setUploadForm({ ...uploadForm, folder_id: event.target.value })}><option value="">Unfiled</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></div><div className="space-y-2"><Label>Category</Label><Input value={uploadForm.category} onChange={(event) => setUploadForm({ ...uploadForm, category: event.target.value })} /></div></div><div className="space-y-2"><Label>Tags for every file</Label><Input value={uploadForm.tags} onChange={(event) => setUploadForm({ ...uploadForm, tags: event.target.value })} placeholder="board, handbook" /></div><label className="flex gap-3 rounded-md border p-3 text-sm"><input type="checkbox" checked={uploadForm.fred_enabled} onChange={(event) => setUploadForm({ ...uploadForm, fred_enabled: event.target.checked })} /><span>Allow FRED to use these documents, subject to their folder or document permissions.</span></label>{uploadResults.length > 0 && <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border p-2 text-xs">{uploadResults.map((result) => <p key={result.file} className={result.ok ? "text-emerald-700" : "text-red-700"}>{result.ok ? "✓" : "✕"} {result.file}{result.error ? ` — ${result.error}` : ""}</p>)}</div>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setUploadOpen(false)}>Cancel</Button><Button disabled={!uploadFiles.length || uploadMutation.isPending} onClick={() => uploadMutation.mutate()}>{uploadMutation.isPending ? `Uploading ${uploadFiles.length}…` : `Upload ${uploadFiles.length || ""} file${uploadFiles.length === 1 ? "" : "s"}`}</Button></div></div></DialogContent>
       </Dialog>
 
+      <Dialog open={folderOpen} onOpenChange={setFolderOpen}><DialogContent><DialogHeader><DialogTitle>Create folder</DialogTitle><DialogDescription>New folders begin with organization-wide view access. You can restrict access immediately afterward.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Folder name</Label><Input value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Board Handbook" /></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setFolderOpen(false)}>Cancel</Button><Button disabled={!folderName.trim() || createFolderMutation.isPending} onClick={() => createFolderMutation.mutate()}>Create folder</Button></div></div></DialogContent></Dialog>
+
+      <Dialog open={Boolean(folderEditTarget)} onOpenChange={(open) => !open && setFolderEditTarget(null)}><DialogContent><DialogHeader><DialogTitle>Folder settings</DialogTitle><DialogDescription>Rename this folder or archive it. Documents remain available through All documents.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Folder name</Label><Input value={folderEditName} onChange={(event) => setFolderEditName(event.target.value)} /></div><div className="flex justify-between gap-2"><Button variant="destructive" disabled={editFolderMutation.isPending} onClick={() => editFolderMutation.mutate({ status: "archived" })}>Archive folder</Button><div className="flex gap-2"><Button variant="outline" onClick={() => setFolderEditTarget(null)}>Cancel</Button><Button disabled={!folderEditName.trim() || editFolderMutation.isPending} onClick={() => editFolderMutation.mutate({})}>Save</Button></div></div></div></DialogContent></Dialog>
+
       <Dialog open={Boolean(editDocument)} onOpenChange={(open) => !open && setEditDocument(null)}>
-        <DialogContent><DialogHeader><DialogTitle>Edit document details</DialogTitle><DialogDescription>Update how this document appears in search and filters.</DialogDescription></DialogHeader><DocumentForm value={editForm} setValue={setEditForm} onSubmit={(event) => { event.preventDefault(); editMutation.mutate(editForm); }} pending={editMutation.isPending} submitLabel="Save changes" /></DialogContent>
+        <DialogContent><DialogHeader><DialogTitle>Edit document details</DialogTitle><DialogDescription>Update how this document appears in search and filters.</DialogDescription></DialogHeader><DocumentForm value={editForm} setValue={setEditForm} folders={folders} onSubmit={(event) => { event.preventDefault(); editMutation.mutate(editForm); }} pending={editMutation.isPending} submitLabel="Save changes" /></DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(versionDocument)} onOpenChange={(open) => !open && setVersionDocument(null)}>
@@ -323,6 +426,22 @@ export default function DocumentLibrary() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <PermissionsDialog open={Boolean(permissionsTarget)} onOpenChange={(open) => !open && setPermissionsTarget(null)} resource={permissionsTarget} type={permissionsType} />
+      {signatureDocument && <SignatureRequestDialog open={Boolean(signatureDocument)} onOpenChange={(open) => !open && setSignatureDocument(null)} document={signatureDocument} />}
+      <SignatureInboxDialog
+        open={signatureInboxOpen}
+        onOpenChange={(open) => {
+          setSignatureInboxOpen(open);
+          if (!open && linkedSignatureRequestId) {
+            const next = new URLSearchParams(searchParams);
+            next.delete("signature_request");
+            setSearchParams(next, { replace: true });
+          }
+        }}
+        initialRequestId={linkedSignatureRequestId}
+        openFile={openFile}
+      />
     </div>
   );
 }

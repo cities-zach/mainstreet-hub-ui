@@ -195,6 +195,54 @@ export function toggleChatReaction(messageId, emoji) {
   });
 }
 
+export function searchChat(query, channelId = null) {
+  const params = new URLSearchParams({ query });
+  if (channelId) params.set("channel_id", channelId);
+  return apiFetch(`/chat/search?${params}`);
+}
+
+export function updateChatChannel(channelId, data) {
+  return apiFetch(`/chat/channels/${channelId}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function updateChatPreferences(channelId, notificationLevel) {
+  return apiFetch(`/chat/channels/${channelId}/preferences`, {
+    method: "PATCH", body: JSON.stringify({ notification_level: notificationLevel })
+  });
+}
+
+export function getChatThread(channelId, messageId) {
+  return apiFetch(`/chat/channels/${channelId}/thread/${messageId}`);
+}
+
+export function updateChatMessage(messageId, body) {
+  return apiFetch(`/chat/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ body }) });
+}
+
+export function deleteChatMessage(messageId) {
+  return apiFetch(`/chat/messages/${messageId}`, { method: "DELETE" });
+}
+
+export function getChatPins(channelId) {
+  return apiFetch(`/chat/channels/${channelId}/pins`);
+}
+
+export function toggleChatPin(messageId) {
+  return apiFetch(`/chat/messages/${messageId}/pin`, { method: "POST" });
+}
+
+export function getChatBookmarks() {
+  return apiFetch("/chat/bookmarks");
+}
+
+export function toggleChatBookmark(messageId) {
+  return apiFetch(`/chat/messages/${messageId}/bookmark`, { method: "POST" });
+}
+
+export function createTaskFromChat(messageId, data = {}) {
+  return apiFetch(`/chat/messages/${messageId}/task`, { method: "POST", body: JSON.stringify(data) });
+}
+
 // ----------------------
 // Passport (admin)
 // ----------------------
