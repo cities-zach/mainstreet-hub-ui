@@ -8,6 +8,9 @@ async function source(relativePath) {
 
 test("MarketStreet exposes the full marketing operating hub", async () => {
   const page = await source("src/pages/MarketStreet.jsx");
+  assert.match(page, />Marketing Hub</);
+  assert.match(page, /Plan and manage Main Street&apos;s marketing in one place\./);
+  assert.doesNotMatch(page, /Operating rhythm|Marketing, from request to published/);
   for (const label of ["Overview", "Calendar", "Campaigns", "Content", "Requests", "Channels"]) {
     assert.match(page, new RegExp(`>${label}`));
   }

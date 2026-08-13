@@ -210,8 +210,8 @@ export default function MarketStreet() {
             <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
               <div>
                 <div className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-amber-200"><Store className="h-4 w-4" /> MarketStreet</div>
-                <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Marketing, from request to published.</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">Plan campaigns, coordinate creative, schedule every channel, and keep the source files and approvals with the work.</p>
+                <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Marketing Hub</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">Plan and manage Main Street&apos;s marketing in one place.</p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button variant="secondary" className="bg-white text-[#2d4650] hover:bg-slate-100" onClick={() => setContentOpen(true)}><Plus /> New content</Button>
@@ -245,7 +245,7 @@ export default function MarketStreet() {
                 <ChevronRight />
               </button>
             )}
-            <div className="grid min-w-0 gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+            <div className="min-w-0">
               <Card className="min-w-0 border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <CardHeader><CardTitle>Next on the calendar</CardTitle><CardDescription>Planned posts awaiting production or scheduling confirmation.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
@@ -256,14 +256,6 @@ export default function MarketStreet() {
                         <div className="shrink-0 text-right"><p className="text-sm font-semibold">{safeDate(item.planned_at)}</p><StatusBadge status={item.status} /></div>
                       </div>
                     ))}
-                </CardContent>
-              </Card>
-              <Card className="min-w-0 border-slate-200 bg-[#ece7ec] dark:border-slate-800 dark:bg-slate-900">
-                <CardHeader><CardTitle>Operating rhythm</CardTitle><CardDescription>A simple weekly cadence for the marketing team.</CardDescription></CardHeader>
-                <CardContent className="space-y-4">
-                  {[["Monday", "Review requests and campaign priorities"], ["Wednesday", "Creative review and approvals"], ["Friday", "Confirm next week's scheduled posts"]].map(([day, task], index) => (
-                    <div key={day} className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#835879] text-xs font-bold text-white">{index + 1}</span><div><p className="font-semibold text-slate-900 dark:text-white">{day}</p><p className="text-sm text-slate-600 dark:text-slate-400">{task}</p></div></div>
-                  ))}
                 </CardContent>
               </Card>
             </div>
