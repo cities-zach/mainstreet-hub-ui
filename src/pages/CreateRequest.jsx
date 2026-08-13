@@ -114,8 +114,10 @@ export default function CreateRequest() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const materialDueDates = formData.material_types.map((item) => item.due_date).filter(Boolean).sort();
     createMutation.mutate({
       ...formData,
+      due_date: materialDueDates[0] || null,
       status: "pending"
     });
   };
