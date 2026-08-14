@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { Check, Link2, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -10,28 +9,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import PublicationPlanner from "@/components/marketstreet/PublicationPlanner";
 
 const EMPTY_CAMPAIGN = {
   title: "", description: "", objective: "", audience: "", start_date: "", end_date: "", status: "draft",
 };
 
-function suggestedTime(date) {
-  if (date) return `${date}T09:00`;
-  const now = new Date();
-  const localDate = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
-  return `${localDate}T09:00`;
-}
-
-function newContent(startDate = "") {
+function newContent() {
   return {
     client_id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
     title: "",
     body: "",
     content_type: "social_post",
     status: "idea",
-    channel_ids: [],
-    planned_at: suggestedTime(startDate),
-    publication_status: "planned",
+    publications: [],
     resource: { provider: "canva", title: "", url: "" },
   };
 }
@@ -61,20 +52,17 @@ export default function CampaignWizard({ open, onOpenChange, channels = [], onSu
   const [contentItems, setContentItems] = useState([newContent()]);
 
   const scheduledCount = useMemo(
-    () => contentItems.reduce((total, item) => total + item.channel_ids.length, 0),
+    () => contentItems.reduce((total, item) => total + item.publications.length, 0),
     [contentItems]
   );
   const canContinue = step === 1
     ? Boolean(campaign.title.trim())
     : step === 2
       ? contentItems.length > 0 && contentItems.every((item) => item.title.trim())
-      : contentItems.every((item) => item.channel_ids.length === 0 || item.planned_at);
+      : contentItems.every((item) => item.publications.every((publication) => publication.channel_id && publication.planned_at));
 
   const updateCampaign = (field, value) => {
     setCampaign((current) => ({ ...current, [field]: value }));
-    if (field === "start_date") {
-      setContentItems((current) => current.map((item) => item.planned_at ? item : { ...item, planned_at: suggestedTime(value) }));
-    }
   };
   const updateContent = (clientId, updates) => setContentItems((current) => current.map((item) => (
     item.client_id === clientId ? { ...item, ...updates } : item
@@ -82,14 +70,6 @@ export default function CampaignWizard({ open, onOpenChange, channels = [], onSu
   const updateResource = (clientId, updates) => setContentItems((current) => current.map((item) => (
     item.client_id === clientId ? { ...item, resource: { ...item.resource, ...updates } } : item
   )));
-  const toggleChannel = (clientId, channelId, checked) => setContentItems((current) => current.map((item) => {
-    if (item.client_id !== clientId) return item;
-    const channelIds = checked
-      ? [...new Set([...item.channel_ids, channelId])]
-      : item.channel_ids.filter((id) => id !== channelId);
-    return { ...item, channel_ids: channelIds };
-  }));
-
   const submit = () => onSubmit({
     ...campaign,
     content_items: contentItems.map((item) => ({
@@ -97,9 +77,12 @@ export default function CampaignWizard({ open, onOpenChange, channels = [], onSu
       body: item.body,
       content_type: item.content_type,
       status: item.status,
-      channel_ids: item.channel_ids,
-      planned_at: item.planned_at,
-      publication_status: item.publication_status,
+      publications: item.publications.map((publication) => ({
+        id: publication.id || undefined,
+        channel_id: publication.channel_id,
+        planned_at: publication.planned_at,
+        status: publication.status,
+      })),
       resource: item.resource.url.trim()
         ? { ...item.resource, title: item.resource.title.trim() || item.title.trim() }
         : undefined,
@@ -148,7 +131,7 @@ export default function CampaignWizard({ open, onOpenChange, channels = [], onSu
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between gap-3">
               <div><h3 className="font-semibold">Build the content plan</h3><p className="text-sm text-slate-500">Add the shared copy and optional working source for each item.</p></div>
-              <Button type="button" variant="outline" onClick={() => setContentItems((current) => [...current, newContent(campaign.start_date)])}><Plus /> Add content</Button>
+              <Button type="button" variant="outline" onClick={() => setContentItems((current) => [...current, newContent()])}><Plus /> Add content</Button>
             </div>
             {contentItems.map((item, index) => (
               <div key={item.client_id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
@@ -166,23 +149,11 @@ export default function CampaignWizard({ open, onOpenChange, channels = [], onSu
 
         {step === 3 && (
           <div className="space-y-4 py-2">
-            <div><h3 className="font-semibold">Choose channels and timing</h3><p className="text-sm text-slate-500">Each content item can go to several channels with one shared time.</p></div>
+            <div><h3 className="font-semibold">Choose channels and timing</h3><p className="text-sm text-slate-500">Each publication gets its own channel, date, and time.</p></div>
             {contentItems.map((item, index) => (
               <div key={item.client_id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-                <div className="mb-4 flex items-center justify-between gap-3"><div><p className="font-semibold">{item.title}</p><p className="text-xs text-slate-500">Content {index + 1}</p></div><Badge variant="outline">{item.channel_ids.length} channel{item.channel_ids.length === 1 ? "" : "s"}</Badge></div>
-                <fieldset>
-                  <legend className="text-sm font-medium">Channels</legend>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {channels.map((channel) => {
-                      const checked = item.channel_ids.includes(channel.id);
-                      return <label key={channel.id} htmlFor={`wizard-${item.client_id}-${channel.id}`} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${checked ? "border-[#835879] bg-[#835879]/5" : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><Checkbox id={`wizard-${item.client_id}-${channel.id}`} checked={checked} onCheckedChange={(value) => toggleChannel(item.client_id, channel.id, Boolean(value))} /><span className="h-3 w-3 rounded-full" style={{ backgroundColor: channel.color }} /><span className="text-sm font-medium">{channel.name}</span></label>;
-                    })}
-                  </div>
-                </fieldset>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div><Label htmlFor={`publish-time-${item.client_id}`}>Publish time</Label><Input id={`publish-time-${item.client_id}`} className="mt-1" type="datetime-local" disabled={!item.channel_ids.length} value={item.planned_at} onChange={(event) => updateContent(item.client_id, { planned_at: event.target.value })} /></div>
-                  <div><Label htmlFor={`publish-status-${item.client_id}`}>Status</Label><Select value={item.publication_status} onValueChange={(value) => updateContent(item.client_id, { publication_status: value })} disabled={!item.channel_ids.length}><SelectTrigger id={`publish-status-${item.client_id}`} className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="planned">Planned</SelectItem><SelectItem value="scheduled">Confirmed scheduled</SelectItem></SelectContent></Select></div>
-                </div>
+                <div className="mb-4 flex items-center justify-between gap-3"><div><p className="font-semibold">{item.title}</p><p className="text-xs text-slate-500">Content {index + 1}</p></div><Badge variant="outline">{item.publications.length} publication{item.publications.length === 1 ? "" : "s"}</Badge></div>
+                <PublicationPlanner channels={channels} value={item.publications} onChange={(publications) => updateContent(item.client_id, { publications })} defaultDate={campaign.start_date} />
               </div>
             ))}
             <div className="flex items-center gap-3 rounded-xl bg-slate-100 px-4 py-3 text-sm dark:bg-slate-900"><Link2 className="h-4 w-4 text-[#835879]" /><span><strong>{contentItems.length}</strong> content item{contentItems.length === 1 ? "" : "s"} and <strong>{scheduledCount}</strong> channel placement{scheduledCount === 1 ? "" : "s"} will be created together.</span></div>

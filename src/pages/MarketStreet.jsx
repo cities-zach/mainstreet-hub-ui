@@ -8,7 +8,7 @@ import {
 import {
   Archive, ArchiveRestore, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight,
   CircleAlert, Clock3, ExternalLink, FileText, FolderKanban, LayoutDashboard,
-  Link2, Megaphone, Plus, Send, Settings2, Store, Trash2,
+  Link2, Megaphone, Pencil, Plus, Send, Settings2, Store, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/api";
@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import CampaignWizard from "@/components/marketstreet/CampaignWizard";
+import PublicationPlanner from "@/components/marketstreet/PublicationPlanner";
 
 const STATUS_STYLES = {
   pending: "border-amber-200 bg-amber-50 text-amber-800",
@@ -48,10 +49,10 @@ const STATUS_STYLES = {
 
 const EMPTY_CONTENT = {
   title: "", body: "", campaign_id: "none", content_type: "social_post", status: "idea",
-  channel_ids: [], planned_at: "", publication_status: "planned",
+  publications: [], removed_publication_ids: [], default_date: "",
   resource: { provider: "canva", title: "", url: "" },
 };
-const EMPTY_SCHEDULE = { channel_ids: [], planned_at: "", status: "planned" };
+const EMPTY_SCHEDULE = { publications: [], default_date: "" };
 const EMPTY_RESOURCE = { provider: "canva", title: "", url: "" };
 
 function StatusBadge({ status }) {
@@ -107,6 +108,7 @@ export default function MarketStreet() {
   const [selectedRequestIds, setSelectedRequestIds] = useState([]);
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [contentOpen, setContentOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
   const [contentForm, setContentForm] = useState(EMPTY_CONTENT);
   const [scheduleTarget, setScheduleTarget] = useState(null);
   const [scheduleForm, setScheduleForm] = useState(EMPTY_SCHEDULE);
@@ -153,16 +155,22 @@ export default function MarketStreet() {
     onError: (error) => toast.error(error.message),
   });
   const createContent = useMutation({
-    mutationFn: () => apiFetch("/marketstreet/content-plan", {
-      method: "POST", body: JSON.stringify({
+    mutationFn: () => apiFetch(editTarget ? `/marketstreet/content/${editTarget.id}/plan` : "/marketstreet/content-plan", {
+      method: editTarget ? "PATCH" : "POST", body: JSON.stringify({
         ...contentForm,
         campaign_id: contentForm.campaign_id === "none" ? null : contentForm.campaign_id,
-        resource: contentForm.resource.url.trim()
+        publications: contentForm.publications.map((publication) => ({
+          id: publication.id || undefined,
+          channel_id: publication.channel_id,
+          planned_at: publication.planned_at,
+          status: publication.status,
+        })),
+        resource: !editTarget && contentForm.resource.url.trim()
           ? { ...contentForm.resource, title: contentForm.resource.title.trim() || contentForm.title.trim() }
           : undefined,
       }),
     }),
-    onSuccess: (result) => { refresh(); setContentOpen(false); setContentForm(EMPTY_CONTENT); toast.success(`Content created${result.publications?.length ? ` on ${result.publications.length} channel${result.publications.length === 1 ? "" : "s"}` : ""}`); },
+    onSuccess: (result) => { refresh(); setContentOpen(false); setEditTarget(null); setContentForm(EMPTY_CONTENT); toast.success(editTarget ? "Content and publication schedule updated" : `Content created${result.publications?.length ? ` with ${result.publications.length} publication${result.publications.length === 1 ? "" : "s"}` : ""}`); },
     onError: (error) => toast.error(error.message),
   });
   const createPublication = useMutation({
@@ -215,25 +223,50 @@ export default function MarketStreet() {
   const activeRequests = requests.data || [];
   const selectedDayItems = (calendar.data || []).filter((item) => isSameDay(new Date(item.starts_at), selectedDay));
   const openContentComposer = (day = null) => {
+    setEditTarget(null);
     setContentForm({
       ...EMPTY_CONTENT,
       resource: { ...EMPTY_CONTENT.resource },
-      planned_at: day ? `${format(day, "yyyy-MM-dd")}T09:00` : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+      publications: [],
+      removed_publication_ids: [],
+      default_date: format(day || new Date(), "yyyy-MM-dd"),
     });
     setContentOpen(true);
   };
-  const toggleContentChannel = (channelId, checked) => setContentForm((current) => ({
-    ...current,
-    channel_ids: checked
-      ? [...new Set([...current.channel_ids, channelId])]
-      : current.channel_ids.filter((id) => id !== channelId),
-  }));
-  const toggleScheduleChannel = (channelId, checked) => setScheduleForm((current) => ({
-    ...current,
-    channel_ids: checked
-      ? [...new Set([...current.channel_ids, channelId])]
-      : current.channel_ids.filter((id) => id !== channelId),
-  }));
+  const openContentEditor = (item) => {
+    setEditTarget(item);
+    const editablePublications = (item.publications || []).filter((publication) => publication.status !== "published").map((publication) => ({
+      id: publication.id,
+      client_id: publication.id,
+      channel_id: publication.channel_id,
+      planned_at: format(new Date(publication.planned_at), "yyyy-MM-dd'T'HH:mm"),
+      status: ["planned", "ready", "scheduled", "failed"].includes(publication.status) ? publication.status : "planned",
+    }));
+    setContentForm({
+      ...EMPTY_CONTENT,
+      title: item.title || "",
+      body: item.body || "",
+      campaign_id: item.campaign_id || "none",
+      content_type: item.content_type || "social_post",
+      status: item.status || "idea",
+      publications: editablePublications,
+      removed_publication_ids: [],
+      default_date: editablePublications[0]?.planned_at?.slice(0, 10) || format(new Date(), "yyyy-MM-dd"),
+      resource: { ...EMPTY_CONTENT.resource },
+    });
+    setContentOpen(true);
+  };
+  const updateContentPublications = (publications) => setContentForm((current) => {
+    const nextIds = new Set(publications.map((publication) => publication.id).filter(Boolean));
+    const newlyRemoved = current.publications
+      .filter((publication) => publication.id && !nextIds.has(publication.id))
+      .map((publication) => publication.id);
+    return {
+      ...current,
+      publications,
+      removed_publication_ids: [...new Set([...current.removed_publication_ids, ...newlyRemoved])],
+    };
+  });
 
   return (
     <div className="min-h-screen bg-[#f5f4f1] px-4 py-5 dark:bg-slate-950 md:px-8 md:py-8">
@@ -327,10 +360,10 @@ export default function MarketStreet() {
           </TabsContent>
 
           <TabsContent value="content" className="mt-6 space-y-4">
-            <div className="flex items-center justify-between"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">Content studio</h2><p className="text-sm text-slate-500">Write once, attach the source, then schedule all the right channels together.</p></div><Button onClick={() => openContentComposer()}><Plus /> New content</Button></div>
+            <div className="flex items-center justify-between"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">Content studio</h2><p className="text-sm text-slate-500">Create, edit, and repeat content across channels with a publication time for every post.</p></div><Button onClick={() => openContentComposer()}><Plus /> New content</Button></div>
             {(content.data || []).length === 0 ? <EmptyState icon={Send} title="Your content pipeline is empty" detail="Start with an idea, draft the copy, and schedule it to one or more channels." action={<Button onClick={() => openContentComposer()}><Plus /> Add an idea</Button>} /> : <div className="space-y-4">{content.data.map((item) => {
               const linked = (resources.data || []).filter((resource) => resource.content_item_id === item.id);
-              return <Card key={item.id} className="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"><CardContent className="p-5"><div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3><StatusBadge status={item.status} />{item.campaign_title && <Badge variant="secondary">{item.campaign_title}</Badge>}</div>{item.body && <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{item.body}</p>}<div className="mt-3 flex flex-wrap gap-2">{linked.map((resource) => <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"><Link2 className="h-3 w-3" />{resource.provider.replaceAll("_", " ")} · {resource.title}<ExternalLink className="h-3 w-3" /></a>)}</div></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={() => { setResourceTarget(item); setResourceForm({ ...EMPTY_RESOURCE, title: item.title }); }}><Link2 /> Attach source</Button><Button onClick={() => { setScheduleTarget(item); setScheduleForm({ ...EMPTY_SCHEDULE, channel_ids: [], planned_at: format(new Date(), "yyyy-MM-dd'T'HH:mm") }); }}><CalendarDays /> Add channels</Button></div></div><div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">{(item.publications || []).length === 0 ? <span className="text-sm text-slate-400">Not on the calendar yet.</span> : item.publications.map((publication) => <span key={publication.id} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: publication.channel_color }} /><strong>{publication.channel_name}</strong><span className="text-slate-500">{safeDate(publication.planned_at)}</span><StatusBadge status={publication.status} /></span>)}</div></CardContent></Card>;
+              return <Card key={item.id} className="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"><CardContent className="p-5"><div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3><StatusBadge status={item.status} />{item.campaign_title && <Badge variant="secondary">{item.campaign_title}</Badge>}</div>{item.body && <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{item.body}</p>}<div className="mt-3 flex flex-wrap gap-2">{linked.map((resource) => <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"><Link2 className="h-3 w-3" />{resource.provider.replaceAll("_", " ")} · {resource.title}<ExternalLink className="h-3 w-3" /></a>)}</div></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={() => openContentEditor(item)}><Pencil /> Edit</Button><Button variant="outline" onClick={() => { setResourceTarget(item); setResourceForm({ ...EMPTY_RESOURCE, title: item.title }); }}><Link2 /> Attach source</Button><Button onClick={() => { setScheduleTarget(item); setScheduleForm({ ...EMPTY_SCHEDULE, publications: [], default_date: format(new Date(), "yyyy-MM-dd") }); }}><CalendarDays /> Add publication</Button></div></div><div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">{(item.publications || []).length === 0 ? <span className="text-sm text-slate-400">Not on the calendar yet.</span> : item.publications.map((publication) => <span key={publication.id} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: publication.channel_color }} /><strong>{publication.channel_name}</strong><span className="text-slate-500">{safeDate(publication.planned_at, "MMM d · h:mm a")}</span><StatusBadge status={publication.status} /></span>)}</div></CardContent></Card>;
             })}</div>}
           </TabsContent>
 
@@ -350,32 +383,29 @@ export default function MarketStreet() {
 
       {campaignOpen && <CampaignWizard open={campaignOpen} onOpenChange={setCampaignOpen} channels={enabledChannels} onSubmit={(payload) => createCampaign.mutate(payload)} isPending={createCampaign.isPending} />}
 
-      <Dialog open={contentOpen} onOpenChange={(open) => { setContentOpen(open); if (!open) setContentForm(EMPTY_CONTENT); }}>
-        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
-          <DialogHeader><DialogTitle>New content</DialogTitle><DialogDescription>Write the content, attach its source, and schedule several channels together.</DialogDescription></DialogHeader>
+      <Dialog open={contentOpen} onOpenChange={(open) => { setContentOpen(open); if (!open) { setEditTarget(null); setContentForm(EMPTY_CONTENT); } }}>
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
+          <DialogHeader><DialogTitle>{editTarget ? "Edit content" : "New content"}</DialogTitle><DialogDescription>{editTarget ? "Update the copy and every upcoming publication in one place." : "Write the content, attach its source, and plan each publication."}</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label htmlFor="content-title">Title</Label><Input id="content-title" className="mt-1" value={contentForm.title} onChange={(event) => setContentForm({ ...contentForm, title: event.target.value })} placeholder="Volunteer spotlight: August" /></div>
-            <div><Label htmlFor="content-campaign">Campaign</Label><Select value={contentForm.campaign_id} onValueChange={(value) => setContentForm({ ...contentForm, campaign_id: value })}><SelectTrigger id="content-campaign" className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No campaign</SelectItem>{(campaigns.data || []).map((campaign) => <SelectItem key={campaign.id} value={campaign.id}>{campaign.title}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-4 sm:grid-cols-2"><div><Label htmlFor="content-campaign">Campaign</Label><Select value={contentForm.campaign_id} onValueChange={(value) => setContentForm({ ...contentForm, campaign_id: value })}><SelectTrigger id="content-campaign" className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No campaign</SelectItem>{(campaigns.data || []).map((campaign) => <SelectItem key={campaign.id} value={campaign.id}>{campaign.title}</SelectItem>)}</SelectContent></Select></div><div><Label htmlFor="content-status">Content status</Label><Select value={contentForm.status} onValueChange={(value) => setContentForm({ ...contentForm, status: value })}><SelectTrigger id="content-status" className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="idea">Idea</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="review">Review</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="ready">Ready</SelectItem><SelectItem value="retired">Retired</SelectItem></SelectContent></Select></div></div>
             <div><Label htmlFor="content-copy">Working copy</Label><Textarea id="content-copy" className="mt-1 min-h-28" value={contentForm.body} onChange={(event) => setContentForm({ ...contentForm, body: event.target.value })} placeholder="Draft the shared message here…" /></div>
-            <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+            {!editTarget && <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
               <div className="mb-3 flex items-center gap-2"><Link2 className="h-4 w-4 text-[#835879]" /><p className="text-sm font-semibold">Working source <span className="font-normal text-slate-400">(optional)</span></p></div>
               <div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="content-source-provider">Provider</Label><Select value={contentForm.resource.provider} onValueChange={(value) => setContentForm({ ...contentForm, resource: { ...contentForm.resource, provider: value } })}><SelectTrigger id="content-source-provider" className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="canva">Canva</SelectItem><SelectItem value="google_drive">Google Drive</SelectItem><SelectItem value="document_center">Document Center</SelectItem><SelectItem value="web">Web link</SelectItem></SelectContent></Select></div><div><Label htmlFor="content-source-url">Source URL</Label><Input id="content-source-url" className="mt-1" type="url" value={contentForm.resource.url} onChange={(event) => setContentForm({ ...contentForm, resource: { ...contentForm.resource, url: event.target.value } })} placeholder="https://…" /></div></div>
-            </div>
-            <fieldset><legend className="text-sm font-medium">Channels</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{enabledChannels.map((channel) => { const checked = contentForm.channel_ids.includes(channel.id); return <label key={channel.id} htmlFor={`content-channel-${channel.id}`} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${checked ? "border-[#835879] bg-[#835879]/5" : "border-slate-200 dark:border-slate-800"}`}><Checkbox id={`content-channel-${channel.id}`} checked={checked} onCheckedChange={(value) => toggleContentChannel(channel.id, Boolean(value))} /><span className="h-3 w-3 rounded-full" style={{ backgroundColor: channel.color }} /><span className="text-sm font-medium">{channel.name}</span></label>; })}</div></fieldset>
-            {contentForm.channel_ids.length > 0 && <div className="grid gap-4 sm:grid-cols-2"><div><Label htmlFor="content-publish-time">Publish time</Label><Input id="content-publish-time" className="mt-1" type="datetime-local" value={contentForm.planned_at} onChange={(event) => setContentForm({ ...contentForm, planned_at: event.target.value })} /></div><div><Label htmlFor="content-publication-status">Status</Label><Select value={contentForm.publication_status} onValueChange={(value) => setContentForm({ ...contentForm, publication_status: value })}><SelectTrigger id="content-publication-status" className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="planned">Planned</SelectItem><SelectItem value="scheduled">Confirmed scheduled</SelectItem></SelectContent></Select></div></div>}
+            </div>}
+            {editTarget && (editTarget.publications || []).some((publication) => publication.status === "published") && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Published posts remain in the history and cannot be rescheduled here.</div>}
+            <PublicationPlanner channels={enabledChannels} value={contentForm.publications} onChange={updateContentPublications} defaultDate={contentForm.default_date} />
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setContentOpen(false)}>Cancel</Button><Button disabled={!contentForm.title.trim() || (contentForm.channel_ids.length > 0 && !contentForm.planned_at) || createContent.isPending} onClick={() => createContent.mutate()}>{contentForm.channel_ids.length ? "Create & schedule" : "Save content"}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setContentOpen(false)}>Cancel</Button><Button disabled={!contentForm.title.trim() || contentForm.publications.some((publication) => !publication.channel_id || !publication.planned_at) || createContent.isPending} onClick={() => createContent.mutate()}>{editTarget ? "Save changes" : contentForm.publications.length ? "Create & schedule" : "Save content"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(scheduleTarget)} onOpenChange={(open) => !open && setScheduleTarget(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Add channels</DialogTitle><DialogDescription>Choose every channel that should receive {scheduleTarget?.title}, then set the shared publish time.</DialogDescription></DialogHeader>
-          <div className="space-y-4">
-            <fieldset><legend className="text-sm font-medium">Channels</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{enabledChannels.map((channel) => { const checked = scheduleForm.channel_ids.includes(channel.id); return <label key={channel.id} htmlFor={`schedule-channel-${channel.id}`} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${checked ? "border-[#835879] bg-[#835879]/5" : "border-slate-200 dark:border-slate-800"}`}><Checkbox id={`schedule-channel-${channel.id}`} checked={checked} onCheckedChange={(value) => toggleScheduleChannel(channel.id, Boolean(value))} /><span className="h-3 w-3 rounded-full" style={{ backgroundColor: channel.color }} /><span className="text-sm font-medium">{channel.name}</span></label>; })}</div></fieldset>
-            <div className="grid gap-4 sm:grid-cols-2"><div><Label htmlFor="schedule-publish-time">Publish time</Label><Input id="schedule-publish-time" className="mt-1" type="datetime-local" value={scheduleForm.planned_at} onChange={(event) => setScheduleForm({ ...scheduleForm, planned_at: event.target.value })} /></div><div><Label htmlFor="schedule-status">Status</Label><Select value={scheduleForm.status} onValueChange={(value) => setScheduleForm({ ...scheduleForm, status: value })}><SelectTrigger id="schedule-status" className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="planned">Planned</SelectItem><SelectItem value="scheduled">Confirmed scheduled</SelectItem></SelectContent></Select></div></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setScheduleTarget(null)}>Cancel</Button><Button disabled={!scheduleForm.channel_ids.length || !scheduleForm.planned_at || createPublication.isPending} onClick={() => createPublication.mutate()}>{scheduleForm.status === "scheduled" ? `Confirm ${scheduleForm.channel_ids.length} schedule${scheduleForm.channel_ids.length === 1 ? "" : "s"}` : `Add ${scheduleForm.channel_ids.length || ""} to calendar`}</Button></DialogFooter>
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Add publications</DialogTitle><DialogDescription>Add one or more publication times for {scheduleTarget?.title}. A channel can be added more than once.</DialogDescription></DialogHeader>
+          <PublicationPlanner channels={enabledChannels} value={scheduleForm.publications} onChange={(publications) => setScheduleForm({ ...scheduleForm, publications })} defaultDate={scheduleForm.default_date} />
+          <DialogFooter><Button variant="outline" onClick={() => setScheduleTarget(null)}>Cancel</Button><Button disabled={!scheduleForm.publications.length || scheduleForm.publications.some((publication) => !publication.channel_id || !publication.planned_at) || createPublication.isPending} onClick={() => createPublication.mutate()}>Add {scheduleForm.publications.length || ""} publication{scheduleForm.publications.length === 1 ? "" : "s"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -31,18 +31,23 @@ test("content can link Canva, Drive, and Document Center sources", async () => {
   assert.match(page, /\/marketstreet\/resources/);
   assert.match(page, /Attach source/);
   assert.match(wizard, /Create campaign & schedule/);
-  assert.match(wizard, /channel_ids/);
+  assert.match(wizard, /PublicationPlanner/);
   assert.match(wizard, /Source provider/);
 });
 
-test("content scheduling supports several channels and calendar quick-add", async () => {
+test("content scheduling supports editable, repeatable channel publications", async () => {
   const page = await source("src/pages/MarketStreet.jsx");
+  const planner = await source("src/components/marketstreet/PublicationPlanner.jsx");
   assert.match(page, /\/marketstreet\/campaign-builder/);
   assert.match(page, /\/marketstreet\/content-plan/);
   assert.match(page, /\/marketstreet\/publications\/bulk/);
+  assert.match(page, /\/marketstreet\/content\/\$\{editTarget\.id\}\/plan/);
   assert.match(page, /Add content for this day/);
   assert.match(page, /Create & schedule/);
-  assert.match(page, /Add channels/);
+  assert.match(page, /Add publication/);
+  assert.match(planner, /Add the same channel again for a follow-up post/);
+  assert.match(planner, /T10:00/);
+  assert.match(planner, /length: 96/);
 });
 
 test("legacy requests have bulk archive, restore, trash, and campaign conversion", async () => {
