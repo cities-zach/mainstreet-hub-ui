@@ -12,6 +12,25 @@ test("API client sends verified bearer credentials, not identity headers", async
   assert.doesNotMatch(api, /x-user-id|x-user-email/);
 });
 
+test("API errors retain response status and account codes for auth recovery", async () => {
+  const api = await source("src/api.js");
+  assert.match(api, /class ApiError extends Error/);
+  assert.match(api, /status: res\.status/);
+  assert.match(api, /code: data\?\.code/);
+});
+
+test("public pages bypass member bootstrap and rejected sessions recover locally", async () => {
+  const app = await source("src/App.jsx");
+  assert.match(app, /isPublicPath\(location\.pathname\)/);
+  assert.match(app, /enabled: Boolean\(session\) && !publicPath/);
+  assert.match(app, /error\?\.status !== 401/);
+  assert.match(app, /signOut\(\{ scope: "local" \}\)/);
+  assert.ok(
+    app.indexOf("if (publicPath) return <PublicRoutes />") < app.indexOf("if (authLoading"),
+    "public routes must render before authenticated session bootstrapping"
+  );
+});
+
 test("browser upload helper uses classified API storage routes", async () => {
   const uploads = await source("src/lib/uploads.js");
   assert.match(uploads, /files\/.*public.*private/);

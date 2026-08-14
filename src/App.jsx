@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/queryClient";
 import { apiFetch } from "@/api";
@@ -69,7 +69,68 @@ import InviteAccept from "@/pages/InviteAccept";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 
+const PUBLIC_PATH_PATTERNS = [
+  /^\/invite\/?$/,
+  /^\/privacy\/?$/,
+  /^\/terms\/?$/,
+  /^\/p\/[^/]+\/?$/,
+  /^\/tours\/[^/]+\/?$/,
+  /^\/maps\/[^/]+\/?$/,
+  /^\/fundraising\/[^/]+\/?$/,
+  /^\/contests\/[^/]+\/?$/,
+  /^\/feedback\/public\/?$/,
+];
+
+function isPublicPath(pathname) {
+  return PUBLIC_PATH_PATTERNS.some((pattern) => pattern.test(pathname || "/"));
+}
+
+function PublicRoutes() {
+  return (
+    <Routes>
+      <Route path="/invite" element={<InviteAccept />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/p/:slug" element={<PassportPublic />} />
+      <Route path="/tours/:slug" element={<WalkingTourPublic />} />
+      <Route path="/maps/:slug" element={<DistrictMapPublic />} />
+      <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
+      <Route path="/contests/:slug" element={<ContestPublic />} />
+      <Route path="/feedback/public" element={<PublicSurvey />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}
+
+function AccessError({ error, onReset }) {
+  const notProvisioned = error?.code === "ACCOUNT_NOT_PROVISIONED";
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+      <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900">
+          {notProvisioned ? "Your account needs access" : "MainSuite is temporarily unavailable"}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {notProvisioned
+            ? "Your sign-in is valid, but it is not linked to an active MainSuite account for this organization. Ask an administrator to finish setting up your access."
+            : "We could not finish loading your account. Please try again, or return to sign in if the problem continues."}
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={() => window.location.reload()} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Try again
+          </button>
+          <button type="button" onClick={onReset} className="rounded-lg bg-[#835879] px-4 py-2 text-sm font-semibold text-white hover:bg-[#704a67]">
+            Return to sign in
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function AppInner() {
+  const location = useLocation();
+  const publicPath = isPublicPath(location.pathname);
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const queryClient = useQueryClient();
@@ -101,8 +162,17 @@ function AppInner() {
   } = useQuery({
     queryKey: ["me"],
     queryFn: () => apiFetch("/me"),
-    enabled: !!session
+    enabled: Boolean(session) && !publicPath,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (publicPath || !session || error?.status !== 401) return;
+    void supabase.auth.signOut({ scope: "local" }).finally(() => {
+      queryClient.removeQueries({ queryKey: ["me"] });
+      setSession(null);
+    });
+  }, [error?.status, publicPath, queryClient, session]);
 
   useEffect(() => {
     const enabled = Boolean(me?.user?.dark_mode);
@@ -141,28 +211,30 @@ function AppInner() {
     tester.src = faviconUrl;
   }, [me?.organization?.logo_url]);
 
-  if (authLoading) return <p>Loading…</p>;
+  if (publicPath) return <PublicRoutes />;
+  if (authLoading || (session && error?.status === 401)) return <p>Loading…</p>;
   if (!session) {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/invite" element={<InviteAccept />} />
-          <Route path="/privacy" element={<PrivacyPolicy />} />
-          <Route path="/terms" element={<TermsOfService />} />
-          <Route path="/p/:slug" element={<PassportPublic />} />
-          <Route path="/tours/:slug" element={<WalkingTourPublic />} />
-          <Route path="/maps/:slug" element={<DistrictMapPublic />} />
-          <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
-          <Route path="/contests/:slug" element={<ContestPublic />} />
-          <Route path="/feedback/public" element={<PublicSurvey />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
     );
   }
   if (isLoading) return <p>Loading…</p>;
-  if (error) return <p style={{ color: "red" }}>{error.message}</p>;
+  if (error) {
+    return (
+      <AccessError
+        error={error}
+        onReset={() => {
+          void supabase.auth.signOut({ scope: "local" }).finally(() => {
+            queryClient.removeQueries({ queryKey: ["me"] });
+            setSession(null);
+          });
+        }}
+      />
+    );
+  }
 
   const policyVersions = me?.policy_versions;
   const privacyAccepted =
@@ -181,8 +253,7 @@ function AppInner() {
   );
 
   return (
-    <BrowserRouter>
-      <Routes>
+    <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/invite" element={<InviteAccept />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -290,8 +361,7 @@ function AppInner() {
           <Route path="/settings/users" element={<UserManagement />} />
           <Route path="/settings/ai-sessions" element={<AiSessions />} />
         </Route>
-      </Routes>
-    </BrowserRouter>
+    </Routes>
   );
 }
 
@@ -299,7 +369,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <AppInner />
+        <BrowserRouter>
+          <AppInner />
+        </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
   );

@@ -5,6 +5,16 @@ import { supabase } from "@/lib/supabaseClient";
 export const API_BASE =
   (import.meta.env?.VITE_API_URL || "").replace(/\/$/, "") || "/api";
 
+export class ApiError extends Error {
+  constructor(message, { status, code, data } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status ?? null;
+    this.code = code ?? null;
+    this.data = data ?? null;
+  }
+}
+
 export async function buildAuthHeaders(extraHeaders = {}) {
   const headers = new Headers(extraHeaders);
   const { data: sessionData } = await supabase.auth.getSession();
@@ -42,7 +52,11 @@ export async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     const msg = data?.error || `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new ApiError(msg, {
+      status: res.status,
+      code: data?.code,
+      data,
+    });
   }
 
   return data;
