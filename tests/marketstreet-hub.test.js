@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { marketStreetDateTimeToIso, marketStreetIsoToDateTime } from "../src/lib/marketstreetTime.js";
 
 async function source(relativePath) {
   return fs.readFile(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -48,6 +49,13 @@ test("content scheduling supports editable, repeatable channel publications", as
   assert.match(planner, /Add the same channel again for a follow-up post/);
   assert.match(planner, /T10:00/);
   assert.match(planner, /length: 96/);
+});
+
+test("publication wall-clock times serialize in MarketStreet's Central timezone", () => {
+  assert.equal(marketStreetDateTimeToIso("2026-08-14T10:00"), "2026-08-14T15:00:00.000Z");
+  assert.equal(marketStreetDateTimeToIso("2026-01-14T10:15"), "2026-01-14T16:15:00.000Z");
+  assert.equal(marketStreetIsoToDateTime("2026-08-14T15:00:00.000Z"), "2026-08-14T10:00");
+  assert.equal(marketStreetIsoToDateTime("2026-01-14T16:15:00.000Z"), "2026-01-14T10:15");
 });
 
 test("legacy requests have bulk archive, restore, trash, and campaign conversion", async () => {

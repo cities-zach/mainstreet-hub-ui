@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import PublicationPlanner from "@/components/marketstreet/PublicationPlanner";
+import { publicationPayload } from "@/lib/marketstreetTime";
 
 const EMPTY_CAMPAIGN = {
   title: "", description: "", objective: "", audience: "", start_date: "", end_date: "", status: "draft",
@@ -77,12 +78,7 @@ export default function CampaignWizard({ open, onOpenChange, channels = [], onSu
       body: item.body,
       content_type: item.content_type,
       status: item.status,
-      publications: item.publications.map((publication) => ({
-        id: publication.id || undefined,
-        channel_id: publication.channel_id,
-        planned_at: publication.planned_at,
-        status: publication.status,
-      })),
+      publications: item.publications.map(publicationPayload),
       resource: item.resource.url.trim()
         ? { ...item.resource, title: item.resource.title.trim() || item.title.trim() }
         : undefined,

@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import CampaignWizard from "@/components/marketstreet/CampaignWizard";
 import PublicationPlanner from "@/components/marketstreet/PublicationPlanner";
+import { marketStreetIsoToDateTime, publicationPayload } from "@/lib/marketstreetTime";
 
 const STATUS_STYLES = {
   pending: "border-amber-200 bg-amber-50 text-amber-800",
@@ -159,12 +160,7 @@ export default function MarketStreet() {
       method: editTarget ? "PATCH" : "POST", body: JSON.stringify({
         ...contentForm,
         campaign_id: contentForm.campaign_id === "none" ? null : contentForm.campaign_id,
-        publications: contentForm.publications.map((publication) => ({
-          id: publication.id || undefined,
-          channel_id: publication.channel_id,
-          planned_at: publication.planned_at,
-          status: publication.status,
-        })),
+        publications: contentForm.publications.map(publicationPayload),
         resource: !editTarget && contentForm.resource.url.trim()
           ? { ...contentForm.resource, title: contentForm.resource.title.trim() || contentForm.title.trim() }
           : undefined,
@@ -175,7 +171,7 @@ export default function MarketStreet() {
   });
   const createPublication = useMutation({
     mutationFn: () => apiFetch("/marketstreet/publications/bulk", {
-      method: "POST", body: JSON.stringify({ ...scheduleForm, content_item_id: scheduleTarget.id }),
+      method: "POST", body: JSON.stringify({ ...scheduleForm, publications: scheduleForm.publications.map(publicationPayload), content_item_id: scheduleTarget.id }),
     }),
     onSuccess: (result) => { refresh(); setScheduleTarget(null); setScheduleForm(EMPTY_SCHEDULE); toast.success(`${result.length} channel${result.length === 1 ? "" : "s"} added to the calendar`); },
     onError: (error) => toast.error(error.message),
@@ -239,7 +235,7 @@ export default function MarketStreet() {
       id: publication.id,
       client_id: publication.id,
       channel_id: publication.channel_id,
-      planned_at: format(new Date(publication.planned_at), "yyyy-MM-dd'T'HH:mm"),
+      planned_at: marketStreetIsoToDateTime(publication.planned_at),
       status: ["planned", "ready", "scheduled", "failed"].includes(publication.status) ? publication.status : "planned",
     }));
     setContentForm({
