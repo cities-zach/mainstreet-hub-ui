@@ -36,6 +36,8 @@ import CRM from "@/pages/CRM";
 import Outreach from "@/pages/Outreach";
 import WalkingTours from "@/pages/WalkingTours";
 import WalkingTourPublic from "@/pages/WalkingTourPublic";
+import DistrictMaps from "@/pages/DistrictMaps";
+import DistrictMapPublic from "@/pages/DistrictMapPublic";
 import Fundraising from "@/pages/Fundraising";
 import FundraisingPublic from "@/pages/FundraisingPublic";
 import Contests from "@/pages/Contests";
@@ -150,6 +152,7 @@ function AppInner() {
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/p/:slug" element={<PassportPublic />} />
           <Route path="/tours/:slug" element={<WalkingTourPublic />} />
+          <Route path="/maps/:slug" element={<DistrictMapPublic />} />
           <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
           <Route path="/contests/:slug" element={<ContestPublic />} />
           <Route path="/feedback/public" element={<PublicSurvey />} />
@@ -186,6 +189,7 @@ function AppInner() {
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/p/:slug" element={<PassportPublic />} />
         <Route path="/tours/:slug" element={<WalkingTourPublic />} />
+        <Route path="/maps/:slug" element={<DistrictMapPublic />} />
         <Route path="/fundraising/:slug" element={<FundraisingPublic />} />
         <Route path="/contests/:slug" element={<ContestPublic />} />
         <Route path="/feedback/public" element={<PublicSurvey />} />
@@ -247,6 +251,7 @@ function AppInner() {
           <Route path="/crm/touchpoints" element={<CRM />} />
           <Route path="/outreach" element={<Outreach />} />
           <Route path="/walking-tours" element={<WalkingTours />} />
+          <Route path="/district-maps" element={<DistrictMaps />} />
           <Route path="/fundraising" element={<Fundraising />} />
           <Route path="/contests" element={<Contests />} />
           <Route path="/investors" element={<InvestorTrack />} />

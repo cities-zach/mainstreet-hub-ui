@@ -22,6 +22,7 @@ import {
   Route,
   FileText,
   Inbox,
+  Layers3,
 } from "lucide-react";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ export default function AppShell({ me }) {
     { label: "Passport", to: "/passports", icon: MapPin },
     ...(isAdmin
       ? [
+          { label: "District Maps", to: "/district-maps", icon: Layers3 },
           { label: "WheelSpin", to: "/wheelspin", icon: Sparkles },
           { label: "PhotoBooth", to: "/photobooth", icon: Camera },
         ]

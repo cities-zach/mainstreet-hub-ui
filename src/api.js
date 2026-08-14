@@ -60,6 +60,23 @@ export function sendClientErrorReport(payload) {
   });
 }
 
+// District maps
+export function getDistrictMaps() {
+  return apiFetch("/district-maps");
+}
+
+export function getDistrictMap(id) {
+  return apiFetch(`/district-maps/${id}`);
+}
+
+export function getDistrictMapImport(id, importId) {
+  return apiFetch(`/district-maps/${id}/imports/${importId}`);
+}
+
+export function getPublicDistrictMap(slug) {
+  return apiFetch(`/public/maps/${slug}`);
+}
+
 export function getEvents() {
   return apiFetch("/events");
 }
