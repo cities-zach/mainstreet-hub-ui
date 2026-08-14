@@ -24,11 +24,25 @@ test("MarketStreet exposes the full marketing operating hub", async () => {
 
 test("content can link Canva, Drive, and Document Center sources", async () => {
   const page = await source("src/pages/MarketStreet.jsx");
+  const wizard = await source("src/components/marketstreet/CampaignWizard.jsx");
   assert.match(page, /value="canva">Canva/);
   assert.match(page, /value="google_drive">Google Drive/);
   assert.match(page, /value="document_center">Document Center/);
   assert.match(page, /\/marketstreet\/resources/);
   assert.match(page, /Attach source/);
+  assert.match(wizard, /Create campaign & schedule/);
+  assert.match(wizard, /channel_ids/);
+  assert.match(wizard, /Source provider/);
+});
+
+test("content scheduling supports several channels and calendar quick-add", async () => {
+  const page = await source("src/pages/MarketStreet.jsx");
+  assert.match(page, /\/marketstreet\/campaign-builder/);
+  assert.match(page, /\/marketstreet\/content-plan/);
+  assert.match(page, /\/marketstreet\/publications\/bulk/);
+  assert.match(page, /Add content for this day/);
+  assert.match(page, /Create & schedule/);
+  assert.match(page, /Add channels/);
 });
 
 test("legacy requests have bulk archive, restore, trash, and campaign conversion", async () => {
