@@ -31,6 +31,23 @@ test("public pages bypass member bootstrap and rejected sessions recover locally
   );
 });
 
+test("password recovery is public, neutral, and handled through Supabase Auth", async () => {
+  const app = await source("src/App.jsx");
+  const login = await source("src/pages/Login.jsx");
+  const reset = await source("src/pages/ResetPassword.jsx");
+
+  assert.match(app, /\^\\\/reset-password/);
+  assert.match(app, /path="\/reset-password"/);
+  assert.match(app, /event === "PASSWORD_RECOVERY"/);
+  assert.match(login, /resetPasswordForEmail/);
+  assert.match(login, /redirectTo: window\.location\.origin/);
+  assert.match(login, /If an account exists for this email/);
+  assert.match(reset, /updateUser\(\{ password \}\)/);
+  assert.match(reset, /password\.length < 8/);
+  assert.match(reset, /password !== confirmPassword/);
+  assert.match(reset, /recoveryLinkHasError/);
+});
+
 test("browser upload helper uses classified API storage routes", async () => {
   const uploads = await source("src/lib/uploads.js");
   assert.match(uploads, /files\/.*public.*private/);

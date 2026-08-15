@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,22 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setResendSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
+    setStatus(null);
+    setPassword("");
+    if (nextMode !== "sign_up") setFullName("");
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -25,9 +41,19 @@ export default function Login() {
     setIsSubmitting(true);
 
     try {
-      if (mode === "sign_in") {
+      if (mode === "forgot_password") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setStatus({
+          type: "success",
+          message: "If an account exists for this email, a password reset link is on its way. Please check your inbox and spam folder.",
+        });
+        setResendSeconds(60);
+      } else if (mode === "sign_in") {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password,
         });
         if (error) throw error;
@@ -48,7 +74,7 @@ export default function Login() {
           return;
         }
         const { error } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: { data: { full_name: fullName.trim() } },
         });
@@ -64,7 +90,9 @@ export default function Login() {
     } catch (error) {
       setStatus({
         type: "error",
-        message: error.message || "Authentication failed.",
+        message: mode === "forgot_password"
+          ? "We couldn't send the reset email. Please wait a moment and try again."
+          : error.message || "Authentication failed.",
       });
     } finally {
       setIsSubmitting(false);
@@ -76,31 +104,58 @@ export default function Login() {
       <Card className="w-full max-w-md bg-white/90">
         <CardHeader>
           <CardTitle className="text-2xl font-bold text-[#2d4650]">
-            {mode === "sign_in" ? "Sign in to MainSuite" : "Create your account"}
+            {mode === "sign_in"
+              ? "Sign in to MainSuite"
+              : mode === "forgot_password"
+                ? "Reset your password"
+                : "Create your account"}
           </CardTitle>
+          {mode === "forgot_password" && (
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Enter your email and we'll send you a secure link to choose a new password.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label>Email</Label>
+              <Label htmlFor="login-email">Email</Label>
               <Input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
+                autoComplete="email"
                 required
               />
             </div>
-            <div>
-              <Label>Password</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="••••••••"
-                required
-              />
-            </div>
+            {mode !== "forgot_password" && (
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <Label htmlFor="login-password">Password</Label>
+                  {mode === "sign_in" && (
+                    <button
+                      type="button"
+                      className="text-sm font-semibold text-[#835879] hover:underline"
+                      onClick={() => changeMode("forgot_password")}
+                    >
+                      Forgot your password?
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="login-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="••••••••"
+                  autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
+                  minLength={mode === "sign_up" ? 8 : undefined}
+                  required
+                />
+              </div>
+            )}
             {mode === "sign_up" && (
               <div>
                 <Label>Full name</Label>
@@ -147,6 +202,8 @@ export default function Login() {
 
             {status && (
               <div
+                role={status.type === "error" ? "alert" : "status"}
+                aria-live="polite"
                 className={`rounded-lg px-3 py-2 text-sm ${
                   status.type === "success"
                     ? "bg-green-100 text-green-700"
@@ -160,10 +217,14 @@ export default function Login() {
             <Button
               className="w-full bg-[#835879] text-white"
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || (mode === "forgot_password" && resendSeconds > 0)}
             >
               {isSubmitting
                 ? "Working..."
+                : mode === "forgot_password"
+                  ? resendSeconds > 0
+                    ? `Send another link in ${resendSeconds}s`
+                    : "Send reset link"
                 : mode === "sign_in"
                   ? "Sign In"
                   : "Create Account"}
@@ -171,13 +232,15 @@ export default function Login() {
           </form>
 
           <div className="mt-4 text-sm text-center text-slate-500">
-            {mode === "sign_in" ? "Need an account?" : "Already have an account?"}
+            {mode === "sign_in"
+              ? "Need an account?"
+              : mode === "forgot_password"
+                ? "Remember your password?"
+                : "Already have an account?"}
             <button
               type="button"
               className="ml-2 text-[#835879] font-semibold"
-              onClick={() =>
-                setMode((prev) => (prev === "sign_in" ? "sign_up" : "sign_in"))
-              }
+              onClick={() => changeMode(mode === "sign_in" ? "sign_up" : "sign_in")}
             >
               {mode === "sign_in" ? "Create one" : "Sign in"}
             </button>

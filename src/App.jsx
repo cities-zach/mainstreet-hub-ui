@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/queryClient";
 import { apiFetch } from "@/api";
@@ -65,6 +65,7 @@ import ErrorBoundary from "@/components/system/ErrorBoundary";
 import PolicyAcceptanceModal from "@/components/policies/PolicyAcceptanceModal";
 import NamePromptModal from "@/components/users/NamePromptModal";
 import Login from "@/pages/Login";
+import ResetPassword from "@/pages/ResetPassword";
 import InviteAccept from "@/pages/InviteAccept";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
@@ -73,6 +74,7 @@ const PUBLIC_PATH_PATTERNS = [
   /^\/invite\/?$/,
   /^\/privacy\/?$/,
   /^\/terms\/?$/,
+  /^\/reset-password\/?$/,
   /^\/p\/[^/]+\/?$/,
   /^\/tours\/[^/]+\/?$/,
   /^\/maps\/[^/]+\/?$/,
@@ -91,6 +93,7 @@ function PublicRoutes() {
       <Route path="/invite" element={<InviteAccept />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/p/:slug" element={<PassportPublic />} />
       <Route path="/tours/:slug" element={<WalkingTourPublic />} />
       <Route path="/maps/:slug" element={<DistrictMapPublic />} />
@@ -130,6 +133,7 @@ function AccessError({ error, onReset }) {
 
 function AppInner() {
   const location = useLocation();
+  const navigate = useNavigate();
   const publicPath = isPublicPath(location.pathname);
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -140,12 +144,19 @@ function AppInner() {
     supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
       setSession(data.session);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      if (data.session && hashParams.get("type") === "recovery") {
+        navigate("/reset-password", { replace: true });
+      }
       setAuthLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, nextSession) => {
+      (event, nextSession) => {
         setSession(nextSession);
+        if (event === "PASSWORD_RECOVERY") {
+          navigate("/reset-password", { replace: true });
+        }
       }
     );
 
@@ -153,7 +164,7 @@ function AppInner() {
       isMounted = false;
       authListener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   const {
     data: me,
