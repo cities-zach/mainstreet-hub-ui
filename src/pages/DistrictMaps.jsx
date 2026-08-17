@@ -33,6 +33,61 @@ function importBadge(status) {
   return <Badge variant="secondary">Ready to publish</Badge>;
 }
 
+function LayerDefaultsCard({ layer, isPending, onUpdate }) {
+  const [displayName, setDisplayName] = useState(layer.display_name || "");
+
+  const trimmedName = displayName.trim();
+  const nameChanged = trimmedName !== layer.display_name;
+  const visibilityId = `layer-visible-${layer.id}`;
+  const nameId = `layer-name-${layer.id}`;
+
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+      <div className="flex items-start gap-3">
+        <input
+          id={visibilityId}
+          type="checkbox"
+          checked={layer.default_visible}
+          disabled={isPending}
+          onChange={(event) => onUpdate(layer.id, { default_visible: event.target.checked })}
+          className="mt-1 h-4 w-4 accent-[#835879]"
+        />
+        <label htmlFor={visibilityId} className="cursor-pointer">
+          <span className="block font-semibold">Shown on the public map by default</span>
+          <span className="mt-1 block text-xs leading-5 text-slate-500">{layer.description}</span>
+        </label>
+      </div>
+      <form
+        className="space-y-1"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (trimmedName && nameChanged) onUpdate(layer.id, { display_name: trimmedName });
+        }}
+      >
+        <Label htmlFor={nameId}>Public layer name</Label>
+        <div className="flex gap-2">
+          <Input
+            id={nameId}
+            value={displayName}
+            maxLength={180}
+            onChange={(event) => setDisplayName(event.target.value)}
+            aria-describedby={`${nameId}-help`}
+          />
+          <Button type="submit" variant="outline" disabled={!trimmedName || !nameChanged || isPending}>
+            Save
+          </Button>
+        </div>
+        <p id={`${nameId}-help`} className="text-xs text-slate-400">
+          Used in the public map controls, legend, search results, and feature details.
+        </p>
+      </form>
+      <p className="text-xs text-slate-400">
+        Labels from zoom {Math.max(Number(layer.min_zoom), layer.layer_key === "parcels" ? 18 : 16)}+
+      </p>
+    </div>
+  );
+}
+
 export default function DistrictMaps() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(null);
@@ -277,15 +332,12 @@ export default function DistrictMaps() {
                   <CardHeader><CardTitle className="flex items-center gap-2"><Layers3 className="h-5 w-5" /> Public layer defaults</CardTitle></CardHeader>
                   <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {previewData.layers.map((layer) => (
-                      <label key={layer.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={layer.default_visible}
-                          onChange={(event) => updateLayer.mutate({ layerId: layer.id, payload: { default_visible: event.target.checked } })}
-                          className="mt-1 h-4 w-4 accent-[#835879]"
-                        />
-                        <span><span className="block font-semibold">{layer.display_name}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{layer.description}</span><span className="mt-1 block text-xs text-slate-400">Labels from zoom {Math.max(Number(layer.min_zoom), layer.layer_key === "parcels" ? 18 : 16)}+</span></span>
-                      </label>
+                      <LayerDefaultsCard
+                        key={`${layer.id}:${layer.display_name}`}
+                        layer={layer}
+                        isPending={updateLayer.isPending}
+                        onUpdate={(layerId, payload) => updateLayer.mutate({ layerId, payload })}
+                      />
                     ))}
                   </CardContent>
                 </Card>
