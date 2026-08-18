@@ -49,13 +49,20 @@ export default function ActionCenter() {
     queryClient.invalidateQueries({ queryKey: ["action-center"] });
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
     queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["marketstreet-campaigns"] });
+    queryClient.invalidateQueries({ queryKey: ["marketstreet-campaign"] });
+    queryClient.invalidateQueries({ queryKey: ["marketstreet-calendar"] });
   };
 
   const completeMutation = useMutation({
-    mutationFn: (item) => apiFetch(`/tasks/${item.entity_id}/status`, {
-      method: "PATCH", body: JSON.stringify({ status: "completed" }),
-    }),
-    onSuccess: () => { refresh(); toast.success("Task completed"); },
+    mutationFn: (item) => item.entity_type === "marketing_deliverable"
+      ? apiFetch(`/marketstreet/deliverables/${item.entity_id}`, {
+        method: "PATCH", body: JSON.stringify({ status: "complete" }),
+      })
+      : apiFetch(`/tasks/${item.entity_id}/status`, {
+        method: "PATCH", body: JSON.stringify({ status: "completed" }),
+      }),
+    onSuccess: (_, item) => { refresh(); toast.success(item.entity_type === "marketing_deliverable" ? "Marketing work completed" : "Task completed"); },
     onError: (error) => toast.error(error.message || "Task update failed"),
   });
 
@@ -115,6 +122,7 @@ export default function ActionCenter() {
                     <h2 className="mt-2 font-semibold text-slate-900 dark:text-slate-100">{item.title}</h2>
                     {item.description && <p className="mt-1 text-sm text-slate-500">{item.description}</p>}
                     {item.context?.event_title && <p className="mt-1 text-xs text-slate-400">Event: {item.context.event_title}</p>}
+                    {item.context?.campaign_title && <p className="mt-1 text-xs text-slate-400">Campaign: {item.context.campaign_title}</p>}
                   </div>
                   <div className="flex shrink-0 gap-2">
                     {item.kind === "task" && <Button size="sm" className="gap-2" onClick={() => completeMutation.mutate(item)} disabled={completeMutation.isPending}><Check className="h-4 w-4" /> Complete</Button>}
