@@ -19,6 +19,7 @@ import BudgetDetails from "@/pages/BudgetDetails";
 
 /* ---------- MARKETING ---------- */
 import MarketStreet from "@/pages/MarketStreet";
+import CampaignWorkspace from "@/pages/CampaignWorkspace";
 import CreateRequest from "@/pages/CreateRequest";
 import RequestDetails from "@/pages/RequestDetails";
 
@@ -309,6 +310,7 @@ function AppInner() {
 
           {/* ---------- MARKETING ---------- */}
           <Route path="/marketstreet" element={<MarketStreet />} />
+          <Route path="/marketstreet/campaign/:id" element={<CampaignWorkspace />} />
           <Route path="/marketstreet/new" element={<CreateRequest />} />
           <Route path="/marketstreet/request" element={<RequestDetails />} />
 

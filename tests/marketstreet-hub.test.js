@@ -72,3 +72,25 @@ test("new requests promote the earliest material deadline into the shared calend
   assert.match(page, /materialDueDates/);
   assert.match(page, /due_date: materialDueDates\[0\]/);
 });
+
+test("campaigns open an editable operational workspace", async () => {
+  const app = await source("src/App.jsx");
+  const hub = await source("src/pages/MarketStreet.jsx");
+  const workspace = await source("src/pages/CampaignWorkspace.jsx");
+  assert.match(app, /marketstreet\/campaign\/:id/);
+  assert.match(hub, /marketstreet\/campaign\/\$\{campaign\.id\}/);
+  assert.match(hub, /marketstreet\/campaign\/\$\{item\.campaign_id\}\?deliverable=\$\{item\.id\}/);
+  assert.match(workspace, /Edit campaign/);
+  assert.match(workspace, /Due date and time/);
+  assert.match(workspace, /Actually completed/);
+  assert.match(workspace, /Add proof or working link/);
+  assert.match(workspace, /\/marketstreet\/deliverables\/\$\{deliverableTarget\.id\}/);
+  assert.match(workspace, /marketStreetDateTimeToIso/);
+});
+
+test("Action Center completes MarketStreet work through its own endpoint", async () => {
+  const page = await source("src/pages/ActionCenter.jsx");
+  assert.match(page, /item\.entity_type === "marketing_deliverable"/);
+  assert.match(page, /\/marketstreet\/deliverables\/\$\{item\.entity_id\}/);
+  assert.match(page, /Campaign: \{item\.context\.campaign_title\}/);
+});

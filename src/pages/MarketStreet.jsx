@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format,
@@ -102,7 +102,11 @@ function MetricCard({ icon: Icon, label, value, note, accent = "violet" }) {
 
 export default function MarketStreet() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("overview");
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const campaignFilter = searchParams.get("campaign");
+  const [activeTab, setActiveTab] = useState(["overview", "calendar", "campaigns", "content", "requests", "channels"].includes(requestedTab) ? requestedTab : "overview");
   const [month, setMonth] = useState(startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [requestView, setRequestView] = useState("active");
@@ -149,9 +153,9 @@ export default function MarketStreet() {
     onSuccess: (result) => {
       refresh();
       setCampaignOpen(false);
-      setActiveTab("campaigns");
       const placements = (result.content_items || []).reduce((total, item) => total + (item.publications?.length || 0), 0);
       toast.success(`Campaign created with ${result.content_items?.length || 0} content item${result.content_items?.length === 1 ? "" : "s"}${placements ? ` and ${placements} scheduled placement${placements === 1 ? "" : "s"}` : ""}`);
+      navigate(`/marketstreet/campaign/${result.campaign.id}`);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -193,7 +197,7 @@ export default function MarketStreet() {
   });
   const convertRequest = useMutation({
     mutationFn: (id) => apiFetch(`/marketstreet/requests/${id}/convert`, { method: "POST" }),
-    onSuccess: () => { refresh(); toast.success("Request converted to a campaign"); setActiveTab("campaigns"); },
+    onSuccess: (campaign) => { refresh(); toast.success("Request converted to a campaign"); navigate(`/marketstreet/campaign/${campaign.id}`); },
     onError: (error) => toast.error(error.message),
   });
   const updateChannel = useMutation({
@@ -216,6 +220,9 @@ export default function MarketStreet() {
 
   const enabledChannels = (channels.data || []).filter((channel) => channel.is_enabled);
   const publicationCount = (content.data || []).reduce((total, item) => total + (item.publications?.length || 0), 0);
+  const visibleContent = campaignFilter
+    ? (content.data || []).filter((item) => item.campaign_id === campaignFilter)
+    : (content.data || []);
   const activeRequests = requests.data || [];
   const selectedDayItems = (calendar.data || []).filter((item) => isSameDay(new Date(item.starts_at), selectedDay));
   const openContentComposer = (day = null) => {
@@ -225,6 +232,7 @@ export default function MarketStreet() {
       resource: { ...EMPTY_CONTENT.resource },
       publications: [],
       removed_publication_ids: [],
+      campaign_id: campaignFilter || "none",
       default_date: format(day || new Date(), "yyyy-MM-dd"),
     });
     setContentOpen(true);
@@ -343,7 +351,7 @@ export default function MarketStreet() {
                 <CardHeader><CardTitle>{format(selectedDay, "EEEE, MMMM d")}</CardTitle><CardDescription>{selectedDayItems.length} item{selectedDayItems.length === 1 ? "" : "s"} planned.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   {selectedDayItems.length === 0 ? <EmptyState icon={CalendarDays} title="Open day" detail="Create content with this date already selected." action={<Button onClick={() => openContentComposer(selectedDay)}><Plus /> Add content for this day</Button>} /> : selectedDayItems.map((item) => (
-                    <div key={`${item.item_type}-${item.id}`} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="mb-2 flex items-start justify-between gap-3"><p className="font-semibold">{item.title}</p><StatusBadge status={item.status} /></div><p className="text-sm text-slate-500">{item.channel_name}{item.campaign_title ? ` · ${item.campaign_title}` : ""}</p>{item.item_type === "publication" && item.status !== "published" && <div className="mt-3 flex flex-wrap gap-2">{item.status !== "scheduled" && <Button size="sm" variant="outline" onClick={() => updatePublication.mutate({ id: item.id, status: "scheduled", scheduled_at: item.starts_at })}>Confirm scheduled</Button>}<Button size="sm" onClick={() => updatePublication.mutate({ id: item.id, status: "published", published_at: new Date().toISOString() })}>Mark published</Button></div>}</div>
+                    <div key={`${item.item_type}-${item.id}`} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="mb-2 flex items-start justify-between gap-3"><p className="font-semibold">{item.title}</p><StatusBadge status={item.status} /></div><p className="text-sm text-slate-500">{item.channel_name}{item.campaign_title ? ` · ${item.campaign_title}` : ""}</p>{item.item_type === "publication" && item.status !== "published" && <div className="mt-3 flex flex-wrap gap-2">{item.status !== "scheduled" && <Button size="sm" variant="outline" onClick={() => updatePublication.mutate({ id: item.id, status: "scheduled", scheduled_at: item.starts_at })}>Confirm scheduled</Button>}<Button size="sm" onClick={() => updatePublication.mutate({ id: item.id, status: "published", published_at: new Date().toISOString() })}>Mark published</Button></div>}{item.item_type === "deadline" && item.campaign_id && <Button asChild size="sm" variant="outline" className="mt-3"><Link to={`/marketstreet/campaign/${item.campaign_id}?deliverable=${item.id}`}><Pencil /> Edit work</Link></Button>}</div>
                   ))}
                 </CardContent>
               </Card>
@@ -352,12 +360,12 @@ export default function MarketStreet() {
 
           <TabsContent value="campaigns" className="mt-6 space-y-4">
             <div className="flex items-center justify-between"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">Campaigns</h2><p className="text-sm text-slate-500">The umbrella for requests, deliverables, content, and channel plans.</p></div><Button onClick={() => setCampaignOpen(true)}><Plus /> New campaign</Button></div>
-            {(campaigns.data || []).length === 0 ? <EmptyState icon={FolderKanban} title="No campaigns yet" detail="Create one from scratch or convert an incoming request." action={<Button onClick={() => setCampaignOpen(true)}><Plus /> Create campaign</Button>} /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{campaigns.data.map((campaign) => <Card key={campaign.id} className="border-slate-200 bg-white transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle className="leading-6">{campaign.title}</CardTitle><StatusBadge status={campaign.status} /></div><CardDescription>{campaign.description || campaign.objective || "No campaign brief yet."}</CardDescription></CardHeader><CardContent><div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950"><div><p className="text-lg font-bold">{campaign.deliverable_count}</p><p className="text-[11px] text-slate-500">Deliverables</p></div><div><p className="text-lg font-bold">{campaign.publication_count}</p><p className="text-[11px] text-slate-500">Posts</p></div><div><p className="text-lg font-bold text-blue-700">{campaign.scheduled_count}</p><p className="text-[11px] text-slate-500">Scheduled</p></div></div><div className="mt-4 flex items-center justify-between text-sm text-slate-500"><span>{campaign.owner_name || "Unassigned"}</span><span>{campaign.start_date ? `${safeDate(campaign.start_date)}${campaign.end_date ? ` – ${safeDate(campaign.end_date)}` : ""}` : "Dates not set"}</span></div></CardContent></Card>)}</div>}
+            {(campaigns.data || []).length === 0 ? <EmptyState icon={FolderKanban} title="No campaigns yet" detail="Create one from scratch or convert an incoming request." action={<Button onClick={() => setCampaignOpen(true)}><Plus /> Create campaign</Button>} /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{campaigns.data.map((campaign) => <Link key={campaign.id} to={`/marketstreet/campaign/${campaign.id}`} className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-[#835879] focus:ring-offset-2"><Card className="h-full border-slate-200 bg-white transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle className="leading-6">{campaign.title}</CardTitle><StatusBadge status={campaign.status} /></div><CardDescription>{campaign.description || campaign.objective || "No campaign brief yet."}</CardDescription></CardHeader><CardContent><div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950"><div><p className="text-lg font-bold">{campaign.deliverable_count}</p><p className="text-[11px] text-slate-500">Deliverables</p></div><div><p className="text-lg font-bold">{campaign.publication_count}</p><p className="text-[11px] text-slate-500">Posts</p></div><div><p className="text-lg font-bold text-blue-700">{campaign.scheduled_count}</p><p className="text-[11px] text-slate-500">Scheduled</p></div></div><div className="mt-4 flex items-center justify-between text-sm text-slate-500"><span>{campaign.owner_name || "Unassigned"}</span><span>{campaign.start_date ? `${safeDate(campaign.start_date)}${campaign.end_date ? ` – ${safeDate(campaign.end_date)}` : ""}` : "Dates not set"}</span></div><p className="mt-3 text-xs font-semibold text-[#835879]">Open campaign →</p></CardContent></Card></Link>)}</div>}
           </TabsContent>
 
           <TabsContent value="content" className="mt-6 space-y-4">
-            <div className="flex items-center justify-between"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">Content studio</h2><p className="text-sm text-slate-500">Create, edit, and repeat content across channels with a publication time for every post.</p></div><Button onClick={() => openContentComposer()}><Plus /> New content</Button></div>
-            {(content.data || []).length === 0 ? <EmptyState icon={Send} title="Your content pipeline is empty" detail="Start with an idea, draft the copy, and schedule it to one or more channels." action={<Button onClick={() => openContentComposer()}><Plus /> Add an idea</Button>} /> : <div className="space-y-4">{content.data.map((item) => {
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">Content studio</h2><p className="text-sm text-slate-500">Create, edit, and repeat content across channels with a publication time for every post.</p>{campaignFilter && <p className="mt-1 text-xs font-semibold text-[#835879]">Filtered to one campaign · <Link to="/marketstreet?tab=content" className="underline">Show all content</Link></p>}</div><Button onClick={() => openContentComposer()}><Plus /> New content</Button></div>
+            {visibleContent.length === 0 ? <EmptyState icon={Send} title="Your content pipeline is empty" detail="Start with an idea, draft the copy, and schedule it to one or more channels." action={<Button onClick={() => openContentComposer()}><Plus /> Add an idea</Button>} /> : <div className="space-y-4">{visibleContent.map((item) => {
               const linked = (resources.data || []).filter((resource) => resource.content_item_id === item.id);
               return <Card key={item.id} className="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"><CardContent className="p-5"><div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3><StatusBadge status={item.status} />{item.campaign_title && <Badge variant="secondary">{item.campaign_title}</Badge>}</div>{item.body && <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{item.body}</p>}<div className="mt-3 flex flex-wrap gap-2">{linked.map((resource) => <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"><Link2 className="h-3 w-3" />{resource.provider.replaceAll("_", " ")} · {resource.title}<ExternalLink className="h-3 w-3" /></a>)}</div></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={() => openContentEditor(item)}><Pencil /> Edit</Button><Button variant="outline" onClick={() => { setResourceTarget(item); setResourceForm({ ...EMPTY_RESOURCE, title: item.title }); }}><Link2 /> Attach source</Button><Button onClick={() => { setScheduleTarget(item); setScheduleForm({ ...EMPTY_SCHEDULE, publications: [], default_date: format(new Date(), "yyyy-MM-dd") }); }}><CalendarDays /> Add publication</Button></div></div><div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">{(item.publications || []).length === 0 ? <span className="text-sm text-slate-400">Not on the calendar yet.</span> : item.publications.map((publication) => <span key={publication.id} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: publication.channel_color }} /><strong>{publication.channel_name}</strong><span className="text-slate-500">{safeDate(publication.planned_at, "MMM d · h:mm a")}</span><StatusBadge status={publication.status} /></span>)}</div></CardContent></Card>;
             })}</div>}
