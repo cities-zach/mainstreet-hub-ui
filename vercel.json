@@ -1,5 +1,77 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
+    {
+      "source": "/feedback/public",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Slack-ImgProxy|Discordbot|WhatsApp|TelegramBot|Pinterestbot|SkypeUriPreview|MicrosoftPreview|redditbot|Mastodon|Bluesky).*"
+        },
+        {
+          "type": "query",
+          "key": "id",
+          "value": "(?<surveyId>[0-9a-fA-F-]{36})"
+        }
+      ],
+      "destination": "https://mainsuite.onrender.com/social-preview/surveys/:surveyId"
+    },
+    {
+      "source": "/tours/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Slack-ImgProxy|Discordbot|WhatsApp|TelegramBot|Pinterestbot|SkypeUriPreview|MicrosoftPreview|redditbot|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "https://mainsuite.onrender.com/social-preview/tours/:slug"
+    },
+    {
+      "source": "/maps/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Slack-ImgProxy|Discordbot|WhatsApp|TelegramBot|Pinterestbot|SkypeUriPreview|MicrosoftPreview|redditbot|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "https://mainsuite.onrender.com/social-preview/maps/:slug"
+    },
+    {
+      "source": "/fundraising/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Slack-ImgProxy|Discordbot|WhatsApp|TelegramBot|Pinterestbot|SkypeUriPreview|MicrosoftPreview|redditbot|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "https://mainsuite.onrender.com/social-preview/fundraising/:slug"
+    },
+    {
+      "source": "/contests/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Slack-ImgProxy|Discordbot|WhatsApp|TelegramBot|Pinterestbot|SkypeUriPreview|MicrosoftPreview|redditbot|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "https://mainsuite.onrender.com/social-preview/contests/:slug"
+    },
+    {
+      "source": "/p/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Slack-ImgProxy|Discordbot|WhatsApp|TelegramBot|Pinterestbot|SkypeUriPreview|MicrosoftPreview|redditbot|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "https://mainsuite.onrender.com/social-preview/passports/:slug"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

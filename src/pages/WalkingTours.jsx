@@ -46,11 +46,6 @@ function publicTourUrl(tour) {
   return `${window.location.origin}/tours/${tour.public_slug}`;
 }
 
-function sharePreviewUrl(tour) {
-  if (!tour?.public_slug || typeof window === "undefined") return "";
-  return `${window.location.origin}/api/tours/${tour.public_slug}/share`;
-}
-
 export default function WalkingTours() {
   const queryClient = useQueryClient();
   const [selectedTourId, setSelectedTourId] = useState(null);
@@ -354,13 +349,6 @@ export default function WalkingTours() {
                 <a href={publicTourUrl(tour)} target="_blank" rel="noreferrer">
                   <ExternalLink className="h-4 w-4" />
                   Open public tour
-                </a>
-              </Button>
-            )}
-            {tour.status === "published" && (
-              <Button asChild variant="outline">
-                <a href={sharePreviewUrl(tour)} target="_blank" rel="noreferrer">
-                  Share preview
                 </a>
               </Button>
             )}
