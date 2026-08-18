@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { API_BASE, apiFetch } from "@/api";
+import { apiFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -215,11 +215,7 @@ export default function SurveyBuilder() {
   const surveyLink = surveyId
     ? `${window.location.origin}/feedback/public?id=${surveyId}`
     : "";
-  const surveyShareLink = surveyId
-    ? new URL(
-        `${API_BASE === "/api" ? "https://mainsuite.onrender.com" : API_BASE}/public/surveys/${surveyId}/share`
-      ).toString()
-    : "";
+  const surveyShareLink = surveyLink;
 
   const copyLink = () => {
     navigator.clipboard.writeText(surveyShareLink || surveyLink);
