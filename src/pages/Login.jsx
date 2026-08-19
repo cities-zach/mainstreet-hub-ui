@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { apiFetch } from "@/api";
 
 export default function Login() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,16 +75,37 @@ export default function Login() {
           });
           return;
         }
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: { data: { full_name: fullName.trim() } },
         });
         if (error) throw error;
-        await apiFetch("/policies/accept", { method: "POST" });
+        if (!data?.session) {
+          setStatus({
+            type: "success",
+            message: "Account created. Confirm your email, then sign in to request access.",
+          });
+          setMode("sign_in");
+          setFullName("");
+          return;
+        }
+        const accessRequest = await apiFetch("/access-requests", {
+          method: "POST",
+          body: JSON.stringify({
+            full_name: fullName.trim(),
+            accepted_policies: true,
+          }),
+        });
+        queryClient.setQueryData(["access-request", "me"], accessRequest);
+        if (accessRequest?.status === "approved") {
+          await queryClient.resetQueries({ queryKey: ["me"] });
+          navigate("/", { replace: true });
+          return;
+        }
         setStatus({
           type: "success",
-          message: "Account created. You can now sign in.",
+          message: "Account created and access requested. An organization administrator must approve it before you can enter MainSuite.",
         });
         setMode("sign_in");
         setFullName("");

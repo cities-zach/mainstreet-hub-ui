@@ -56,6 +56,24 @@ const createInvite = async (data) => {
   });
 };
 
+const fetchAccessRequests = async () => {
+  return apiFetch("/access-requests?status=pending");
+};
+
+const approveAccessRequest = async ({ id, role }) => {
+  return apiFetch(`/access-requests/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+};
+
+const denyAccessRequest = async (id) => {
+  return apiFetch(`/access-requests/${id}/deny`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+};
+
 /* ---------------- COMPONENT ---------------- */
 
 export default function UserManagement() {
@@ -65,6 +83,7 @@ export default function UserManagement() {
   const [announceSubject, setAnnounceSubject] = useState("");
   const [announceMessage, setAnnounceMessage] = useState("");
   const [respectPreferences, setRespectPreferences] = useState(true);
+  const [accessRequestRoles, setAccessRequestRoles] = useState({});
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -80,6 +99,11 @@ export default function UserManagement() {
   const { data: invites = [] } = useQuery({
     queryKey: ["invites"],
     queryFn: fetchInvites,
+  });
+
+  const { data: accessRequests = [], isLoading: accessRequestsLoading } = useQuery({
+    queryKey: ["access-requests", "pending"],
+    queryFn: fetchAccessRequests,
   });
 
   const updateUserMutation = useMutation({
@@ -99,6 +123,30 @@ export default function UserManagement() {
     },
     onError: (error) => {
       toast.error(error?.message || "Failed to send invite");
+    },
+  });
+
+  const approveAccessRequestMutation = useMutation({
+    mutationFn: approveAccessRequest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["access-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["invites"] });
+      toast.success("Access approved");
+    },
+    onError: (error) => {
+      toast.error(error?.message || "Access could not be approved");
+    },
+  });
+
+  const denyAccessRequestMutation = useMutation({
+    mutationFn: denyAccessRequest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["access-requests"] });
+      toast.success("Access request denied");
+    },
+    onError: (error) => {
+      toast.error(error?.message || "Access request could not be denied");
     },
   });
 
@@ -145,6 +193,18 @@ export default function UserManagement() {
     inviteMutation.mutate({ email: inviteEmail.trim(), role: inviteRole });
   };
 
+  const handleAccessRequestApproval = (requestId) => {
+    approveAccessRequestMutation.mutate({
+      id: requestId,
+      role: accessRequestRoles[requestId] || "volunteer",
+    });
+  };
+
+  const handleAccessRequestDenial = (accessRequest) => {
+    if (!window.confirm(`Deny access for ${accessRequest.full_name || accessRequest.email}?`)) return;
+    denyAccessRequestMutation.mutate(accessRequest.id);
+  };
+
   const handleDeleteUser = (user) => {
     if (!user?.id) return;
     const name = user.full_name || user.email || "this user";
@@ -180,7 +240,7 @@ export default function UserManagement() {
             Access Denied
           </h1>
           <p className="text-slate-600 mt-2">
-            Only Super Admins can access this page.
+            Only administrators can access this page.
           </p>
         </div>
       </div>
@@ -249,8 +309,12 @@ export default function UserManagement() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    {currentUser?.role === "super_admin" && (
+                      <>
+                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </>
+                    )}
                     <SelectItem value="event_champion">
                       Event Champion
                     </SelectItem>
@@ -272,6 +336,92 @@ export default function UserManagement() {
               <div className="text-sm text-slate-600">
                 {invites.filter((i) => !i.used_at).length} pending invite
                 {invites.filter((i) => !i.used_at).length === 1 ? "" : "s"}.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Access Requests */}
+        <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">
+                  Pending access requests
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Review people who created an account directly instead of using an invitation.
+                </p>
+              </div>
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                {accessRequests.length} pending
+              </Badge>
+            </div>
+
+            {accessRequestsLoading ? (
+              <p className="text-sm text-slate-500">Loading access requests…</p>
+            ) : accessRequests.length === 0 ? (
+              <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                No pending access requests.
+              </p>
+            ) : (
+              <div className="divide-y rounded-lg border border-slate-200">
+                {accessRequests.map((accessRequest) => {
+                  const selectedRole = accessRequestRoles[accessRequest.id] || "volunteer";
+                  return (
+                    <div
+                      key={accessRequest.id}
+                      className="grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-900">{accessRequest.full_name}</p>
+                        <p className="truncate text-sm text-slate-500">{accessRequest.email}</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Requested {new Date(accessRequest.requested_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <Select
+                        value={selectedRole}
+                        onValueChange={(role) => setAccessRequestRoles((current) => ({
+                          ...current,
+                          [accessRequest.id]: role,
+                        }))}
+                      >
+                        <SelectTrigger className="bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currentUser?.role === "super_admin" && (
+                            <>
+                              <SelectItem value="super_admin">Super Admin</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                            </>
+                          )}
+                          <SelectItem value="event_champion">Event Champion</SelectItem>
+                          <SelectItem value="volunteer">Volunteer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex flex-wrap gap-2 md:justify-end">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 text-white hover:bg-green-700"
+                          disabled={approveAccessRequestMutation.isPending || denyAccessRequestMutation.isPending}
+                          onClick={() => handleAccessRequestApproval(accessRequest.id)}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={approveAccessRequestMutation.isPending || denyAccessRequestMutation.isPending}
+                          onClick={() => handleAccessRequestDenial(accessRequest)}
+                        >
+                          Deny
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
