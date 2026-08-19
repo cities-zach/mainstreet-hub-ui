@@ -9,18 +9,14 @@ export default function UserManagementSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="w-5 h-5 text-[#835879]" />
-          User Management
+          Users & Teams
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex items-center justify-between">
+      <CardContent className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Manage user roles, approvals, and access.
+          Manage user roles, approvals, and reusable teams.
         </p>
-        <Link to="/settings/users">
-          <Button className="bg-[#835879] hover:bg-[#6d4a64] text-white">
-            Manage Users
-          </Button>
-        </Link>
+        <div className="flex gap-2"><Link to="/settings/users"><Button variant="outline">Manage Users</Button></Link><Link to="/settings/teams"><Button className="bg-[#835879] hover:bg-[#6d4a64] text-white">Manage Teams</Button></Link></div>
       </CardContent>
     </Card>
   );

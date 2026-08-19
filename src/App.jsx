@@ -60,6 +60,7 @@ import PhotoBooth from "@/pages/PhotoBooth";
 /* ---------- SETTINGS ---------- */
 import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
+import TeamManagement from "@/pages/TeamManagement";
 import AiSessions from "@/pages/AiSessions";
 import AppShell from "@/components/layout/AppShell";
 import ErrorBoundary from "@/components/system/ErrorBoundary";
@@ -372,6 +373,7 @@ function AppInner() {
             }
           />
           <Route path="/settings/users" element={<UserManagement />} />
+          <Route path="/settings/teams" element={<TeamManagement />} />
           <Route path="/settings/ai-sessions" element={<AiSessions />} />
         </Route>
     </Routes>

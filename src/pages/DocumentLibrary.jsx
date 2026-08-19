@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle, Archive, BrainCircuit, Download, FileSignature, FileText, Folder, FolderPlus,
-  History, Pencil, Plus, RefreshCw, RotateCcw, Search, Shield, Upload,
+  AlertTriangle, Archive, ArrowDown, ArrowUp, BrainCircuit, Download, FileSignature, FileText,
+  Folder, FolderPlus, History, ListOrdered, Pencil, Plus, RefreshCw, RotateCcw, Search, Shield, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -125,13 +125,26 @@ export default function DocumentLibrary() {
   const [versionFile, setVersionFile] = useState(null);
   const [versionNotes, setVersionNotes] = useState("");
 
+  const foldersQuery = useQuery({
+    queryKey: ["document-folders"],
+    queryFn: () => apiFetch("/document-folders"),
+  });
+  const selectedFolder = useMemo(
+    () => (foldersQuery.data || []).find((folder) => folder.id === folderId) || null,
+    [folderId, foldersQuery.data]
+  );
+  const folderSortMode = selectedFolder?.sort_mode || "updated_desc";
   const params = useMemo(() => {
-    const next = new URLSearchParams({ status, limit: "100" });
+    const next = new URLSearchParams({
+      status,
+      limit: folderSortMode === "custom" ? "500" : "100",
+      sort: folderSortMode,
+    });
     if (query.trim()) next.set("query", query.trim());
     if (category) next.set("category", category);
     if (folderId) next.set("folder_id", folderId);
     return next.toString();
-  }, [category, folderId, query, status]);
+  }, [category, folderId, folderSortMode, query, status]);
 
   const documentsQuery = useQuery({
     queryKey: ["documents", params],
@@ -140,10 +153,6 @@ export default function DocumentLibrary() {
   const categoriesQuery = useQuery({
     queryKey: ["document-categories"],
     queryFn: () => apiFetch("/documents/categories"),
-  });
-  const foldersQuery = useQuery({
-    queryKey: ["document-folders"],
-    queryFn: () => apiFetch("/document-folders"),
   });
   const signatureInboxQuery = useQuery({
     queryKey: ["signature-requests", "mine"],
@@ -214,6 +223,30 @@ export default function DocumentLibrary() {
       refresh(); setFolderEditTarget(null); toast.success("Folder updated");
     },
     onError: (error) => toast.error(error.message || "Folder could not be updated"),
+  });
+
+  const folderSortMutation = useMutation({
+    mutationFn: (sortMode) => apiFetch(`/document-folders/${selectedFolder.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sort_mode: sortMode }),
+    }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Folder order updated");
+    },
+    onError: (error) => toast.error(error.message || "Folder order could not be updated"),
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: (documentIds) => apiFetch(`/document-folders/${selectedFolder.id}/order`, {
+      method: "PUT",
+      body: JSON.stringify({ document_ids: documentIds }),
+    }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Custom order saved");
+    },
+    onError: (error) => toast.error(error.message || "Custom order could not be saved"),
   });
 
   const moveMutation = useMutation({
@@ -296,6 +329,17 @@ export default function DocumentLibrary() {
   const categories = categoriesQuery.data || [];
   const folders = foldersQuery.data || [];
   const pendingSignatures = (signatureInboxQuery.data || []).filter((request) => request.recipient_status === "pending").length;
+  const canCustomOrder = Boolean(
+    selectedFolder?.can_manage && selectedFolder.sort_mode === "custom" && status === "active" &&
+    !query.trim() && !category && !documentsQuery.data?.next_cursor
+  );
+  const moveInCustomOrder = (index, offset) => {
+    const target = index + offset;
+    if (!canCustomOrder || target < 0 || target >= documents.length) return;
+    const ids = documents.map((document) => document.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    reorderMutation.mutate(ids);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 dark:from-slate-950 dark:to-slate-900 md:p-8">
@@ -326,6 +370,32 @@ export default function DocumentLibrary() {
           </CardContent>
         </Card>
 
+        {selectedFolder && (
+          <Card>
+            <CardContent className="flex flex-col justify-between gap-3 py-4 sm:flex-row sm:items-center">
+              <div>
+                <p className="flex items-center gap-2 font-medium"><ListOrdered className="h-4 w-4" /> Folder order</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedFolder.sort_mode === "custom"
+                    ? "Use the arrow controls on each document to set the shared order."
+                    : "This ordering is shared with everyone who can open the folder."}
+                </p>
+              </div>
+              <select
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+                value={selectedFolder.sort_mode || "updated_desc"}
+                disabled={!selectedFolder.can_manage || folderSortMutation.isPending}
+                onChange={(event) => folderSortMutation.mutate(event.target.value)}
+                aria-label={`Sort ${selectedFolder.name}`}
+              >
+                <option value="updated_desc">Newest activity first</option>
+                <option value="title_asc">Title A–Z</option>
+                <option value="custom">Custom order</option>
+              </select>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardContent className="grid gap-3 pt-6 md:grid-cols-[1fr_220px_auto]">
             <div className="relative">
@@ -352,7 +422,7 @@ export default function DocumentLibrary() {
           <Card><CardContent className="py-16 text-center text-slate-500">No documents match these filters.</CardContent></Card>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
-            {documents.map((document) => (
+            {documents.map((document, documentIndex) => (
               <Card key={document.id} className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
@@ -378,6 +448,26 @@ export default function DocumentLibrary() {
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                    {canCustomOrder && (
+                      <div className="mr-1 flex items-center gap-1" aria-label={`Order ${document.title}`}>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8"
+                          aria-label={`Move ${document.title} up`}
+                          disabled={documentIndex === 0 || reorderMutation.isPending}
+                          onClick={() => moveInCustomOrder(documentIndex, -1)}
+                        ><ArrowUp className="h-4 w-4" /></Button>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8"
+                          aria-label={`Move ${document.title} down`}
+                          disabled={documentIndex === documents.length - 1 || reorderMutation.isPending}
+                          onClick={() => moveInCustomOrder(documentIndex, 1)}
+                        ><ArrowDown className="h-4 w-4" /></Button>
+                      </div>
+                    )}
                     <Button size="sm" className="gap-2" onClick={() => openFile(document.file_id)}><Download className="h-4 w-4" /> Open</Button>
                     <Button size="sm" variant="outline" className="gap-2" onClick={() => setVersionDocument(document)}><History className="h-4 w-4" /> {document.version_count} version{document.version_count === 1 ? "" : "s"}</Button>
                     {document.can_manage && <Button size="sm" variant="ghost" className="gap-2" onClick={() => { setEditDocument(document); setEditForm({ title: document.title, description: document.description || "", category: document.category || "", tags: (document.tags || []).join(", "), folder_id: document.folder_id || "", file: null }); }}><Pencil className="h-4 w-4" /> Edit</Button>}
