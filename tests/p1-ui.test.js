@@ -22,6 +22,23 @@ test("Action Center reads a unified queue and completes work through existing do
   assert.doesNotMatch(page, /\/action-center\/complete|\/action-items/);
 });
 
+test("TaskMaster supports first-class person or team assignment", async () => {
+  const [form, taskMaster, taskItem, actionCenter] = await Promise.all([
+    fs.readFile(new URL("../src/components/taskmaster/TaskForm.jsx", import.meta.url), "utf8"),
+    fs.readFile(new URL("../src/pages/TaskMaster.jsx", import.meta.url), "utf8"),
+    fs.readFile(new URL("../src/components/taskmaster/TaskItem.jsx", import.meta.url), "utf8"),
+    fs.readFile(new URL("../src/pages/ActionCenter.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(form, /assigned_team_id/);
+  assert.match(form, /apiFetch\("\/teams"\)/);
+  assert.match(form, /CommandGroup heading="Teams"/);
+  assert.match(form, /assigned person or team members/i);
+  assert.match(taskMaster, /task\.assigned_team_member/);
+  assert.match(taskMaster, /team:\$\{teamOption\.id\}/);
+  assert.match(taskItem, /task\?\.assigned_team_name/);
+  assert.match(actionCenter, /Assigned to your team/);
+});
+
 test("P1 pages are authenticated routes in the shared app shell", async () => {
   const app = await source("src/App.jsx");
   const shell = await source("src/components/layout/AppShell.jsx");

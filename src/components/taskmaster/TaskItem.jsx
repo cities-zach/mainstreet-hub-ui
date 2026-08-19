@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { CheckCircle, Circle, ListChecks, Pencil, Trash2, Link2 } from "lucide-react";
+import { CheckCircle, Circle, ListChecks, Pencil, Trash2, Link2, Users } from "lucide-react";
 import { differenceInCalendarDays, endOfDay, format, isBefore, parseISO } from "date-fns";
 import { apiFetch } from "@/api";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ export default function TaskItem({
       : "border-slate-200";
 
   const assignedToLabel =
-    task?.assigned_to_name || task?.assigned_to_email || "Unassigned";
+    task?.assigned_team_name || task?.assigned_to_name || task?.assigned_to_email || "Unassigned";
   const updatedAt = task?.updated_at ? parseISO(task.updated_at) : null;
   const stepTotal = Number(task?.step_count || 0);
   const stepCompleted = Number(task?.step_completed_count || 0);
@@ -174,7 +174,10 @@ export default function TaskItem({
             >
               {task.title || "Untitled Task"}
             </p>
-            <p className="text-xs text-slate-500">Assigned to: {assignedToLabel}</p>
+            <p className="flex items-center gap-1 text-xs text-slate-500">
+              {task.assigned_team_name && <Users className="h-3 w-3" />}
+              Assigned to{task.assigned_team_name ? " team" : ""}: {assignedToLabel}
+            </p>
             <p className="text-xs text-slate-500">
               Steps: {stepCompleted}/{stepTotal} complete
             </p>

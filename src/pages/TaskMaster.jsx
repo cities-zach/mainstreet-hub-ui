@@ -25,7 +25,7 @@ export default function TaskMaster() {
   const [isNewTaskDialogOpen, setIsNewTaskDialogOpen] = useState(false);
   const [filter, setFilter] = useState("active");
   const [allEventFilter, setAllEventFilter] = useState("all");
-  const [allUserFilter, setAllUserFilter] = useState("all");
+  const [allAssigneeFilter, setAllAssigneeFilter] = useState("all");
   const [showLevelUp, setShowLevelUp] = useState({ visible: false, level: 1 });
   const queryClient = useQueryClient();
 
@@ -50,6 +50,11 @@ export default function TaskMaster() {
     queryFn: () => apiFetch("/users")
   });
 
+  const { data: teams = [] } = useQuery({
+    queryKey: ["organization-teams"],
+    queryFn: () => apiFetch("/teams")
+  });
+
   const { data: soundSettings } = useQuery({
     queryKey: ["sound_settings"],
     queryFn: () => apiFetch("/system/settings/sounds"),
@@ -64,7 +69,7 @@ export default function TaskMaster() {
 
   const isTaskVisible = (task) => {
     if (!task.is_private) return true;
-    return task.assigned_to_id === user.id || task.assigned_by_id === user.id;
+    return task.assigned_to_id === user.id || task.assigned_by_id === user.id || task.assigned_team_member;
   };
 
   const filteredTasks = tasks.filter((task) => {
@@ -145,12 +150,23 @@ export default function TaskMaster() {
     return eventGroups;
   };
 
-  const myTasks = filteredTasks.filter((task) => task.assigned_to_id === user.id);
-  const unassignedTasks = filteredTasks.filter((task) => !task.assigned_to_id);
+  const myTasks = filteredTasks.filter(
+    (task) => task.assigned_to_id === user.id || task.assigned_team_member
+  );
+  const unassignedTasks = filteredTasks.filter(
+    (task) => !task.assigned_to_id && !task.assigned_team_id
+  );
   const allTasks = filteredTasks.filter((task) => {
     if (allEventFilter !== "all" && task.event_id !== allEventFilter) return false;
-    if (allUserFilter === "unassigned") return !task.assigned_to_id;
-    if (allUserFilter !== "all") return task.assigned_to_id === allUserFilter;
+    if (allAssigneeFilter === "unassigned") {
+      return !task.assigned_to_id && !task.assigned_team_id;
+    }
+    if (allAssigneeFilter.startsWith("user:")) {
+      return task.assigned_to_id === allAssigneeFilter.slice(5);
+    }
+    if (allAssigneeFilter.startsWith("team:")) {
+      return task.assigned_team_id === allAssigneeFilter.slice(5);
+    }
     return true;
   });
 
@@ -230,16 +246,25 @@ export default function TaskMaster() {
       </select>
       <select
         className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-        value={allUserFilter}
-        onChange={(event) => setAllUserFilter(event.target.value)}
+        value={allAssigneeFilter}
+        onChange={(event) => setAllAssigneeFilter(event.target.value)}
       >
         <option value="all">All assignees</option>
         <option value="unassigned">Unassigned</option>
+        {teams.length > 0 && <optgroup label="Teams">
+          {teams.map((teamOption) => (
+            <option key={teamOption.id} value={`team:${teamOption.id}`}>
+              {teamOption.name}
+            </option>
+          ))}
+        </optgroup>}
+        <optgroup label="People">
         {users.map((userOption) => (
-          <option key={userOption.id} value={userOption.id}>
+          <option key={userOption.id} value={`user:${userOption.id}`}>
             {getUserLabel(userOption)}
           </option>
         ))}
+        </optgroup>
       </select>
     </div>
   );
@@ -254,7 +279,7 @@ export default function TaskMaster() {
               TaskMaster
             </h1>
             <p className="text-slate-500 dark:text-slate-400">
-              Track, assign and manage your events
+              Track, assign, and manage work for people and teams
             </p>
           </div>
 
@@ -292,7 +317,7 @@ export default function TaskMaster() {
             <DialogHeader>
               <DialogTitle>Create New Task</DialogTitle>
               <DialogDescription>
-                Assign a task to a user or team member.
+                Assign a task to one person, a whole team, or leave it unassigned.
               </DialogDescription>
             </DialogHeader>
             <TaskForm

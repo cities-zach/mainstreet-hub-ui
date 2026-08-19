@@ -1,7 +1,7 @@
 import { createElement, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bell, Check, CheckCircle2, ClipboardCheck, Inbox, RefreshCw } from "lucide-react";
+import { AlertTriangle, Bell, Check, CheckCircle2, ClipboardCheck, Inbox, RefreshCw, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/api";
@@ -123,6 +123,7 @@ export default function ActionCenter() {
                     {item.description && <p className="mt-1 text-sm text-slate-500">{item.description}</p>}
                     {item.context?.event_title && <p className="mt-1 text-xs text-slate-400">Event: {item.context.event_title}</p>}
                     {item.context?.campaign_title && <p className="mt-1 text-xs text-slate-400">Campaign: {item.context.campaign_title}</p>}
+                    {item.context?.assigned_team_name && <p className="mt-1 flex items-center gap-1 text-xs text-slate-400"><Users className="h-3 w-3" />Assigned to your team: {item.context.assigned_team_name}</p>}
                   </div>
                   <div className="flex shrink-0 gap-2">
                     {item.kind === "task" && <Button size="sm" className="gap-2" onClick={() => completeMutation.mutate(item)} disabled={completeMutation.isPending}><Check className="h-4 w-4" /> Complete</Button>}

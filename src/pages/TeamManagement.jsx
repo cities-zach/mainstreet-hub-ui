@@ -118,13 +118,13 @@ export default function TeamManagement() {
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="flex items-center gap-3 text-3xl font-bold text-[#2d4650] dark:text-slate-100"><Users className="h-8 w-8" /> Teams</h1>
-            <p className="mt-2 text-slate-500">Reusable groups for document permissions and future assignments across MainSuite.</p>
+            <p className="mt-2 text-slate-500">Reusable groups for document permissions and TaskMaster assignments across MainSuite.</p>
           </div>
           <Button className="gap-2 bg-[#835879] text-white" onClick={() => openEditor()}><Plus className="h-4 w-4" /> New team</Button>
         </div>
 
         {teams.length === 0 ? (
-          <Card><CardContent className="py-16 text-center text-slate-500">No teams yet. Create one to start assigning folder access.</CardContent></Card>
+          <Card><CardContent className="py-16 text-center text-slate-500">No teams yet. Create one to assign document access and TaskMaster work.</CardContent></Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {teams.map((team) => (

@@ -38,6 +38,7 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
     due_date: task?.due_date || "",
     event_id: task?.event_id || "",
     assigned_to_id: task?.assigned_to_id || "",
+    assigned_team_id: task?.assigned_team_id || "",
     is_private: task?.is_private || false
   });
   const [newStepTitle, setNewStepTitle] = useState("");
@@ -56,6 +57,11 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
     queryFn: () => apiFetch("/users")
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["organization-teams"],
+    queryFn: () => apiFetch("/teams")
   });
 
   const { data: events = [] } = useQuery({
@@ -78,6 +84,7 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
         due_date: "",
         event_id: "",
         assigned_to_id: "",
+        assigned_team_id: "",
         is_private: false
       });
       setSteps([]);
@@ -112,7 +119,7 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
       due_date: formData.due_date || null,
       event_id: formData.event_id || null,
       assigned_to_id: formData.assigned_to_id || null,
-      assigned_by_id: currentUser?.id || null,
+      assigned_team_id: formData.assigned_team_id || null,
       is_private: !!formData.is_private,
       crm_contact_id: crmLink?.type === "contact" ? crmLink.id : undefined,
       crm_entity_id: crmLink?.type === "entity" ? crmLink.id : undefined,
@@ -136,6 +143,14 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
   };
 
   const selectedUser = users.find((u) => u.id === formData.assigned_to_id);
+  const selectedTeam = teams.find((teamOption) => teamOption.id === formData.assigned_team_id);
+  const selectedAssigneeLabel = selectedTeam
+    ? `${selectedTeam.name} (${selectedTeam.member_count} member${selectedTeam.member_count === 1 ? "" : "s"})`
+    : formData.assigned_team_id && task?.assigned_team_name
+      ? `${task.assigned_team_name}${task.assigned_team_status === "archived" ? " (archived)" : ""}`
+    : formData.assigned_to_id
+      ? getUserLabel(selectedUser)
+      : "Unassigned";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -172,7 +187,11 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  setFormData({ ...formData, assigned_to_id: currentUser.id })
+                  setFormData({
+                    ...formData,
+                    assigned_to_id: currentUser.id,
+                    assigned_team_id: "",
+                  })
                 }
               >
                 Assign to me
@@ -187,40 +206,83 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
                 className="w-full justify-between overflow-hidden"
               >
                 <span className="truncate">
-                  {formData.assigned_to_id
-                    ? getUserLabel(selectedUser)
-                    : "Unassigned"}
+                  {selectedAssigneeLabel}
                 </span>
                 <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-full p-0 max-h-[60vh] overflow-hidden">
               <Command>
-                <CommandInput placeholder="Search users..." />
+                <CommandInput placeholder="Search people and teams..." />
                 <CommandList className="max-h-[240px] overflow-y-auto">
-                  <CommandEmpty>No users found.</CommandEmpty>
+                  <CommandEmpty>No people or teams found.</CommandEmpty>
                   <CommandGroup>
                     <CommandItem
                       value="unassigned"
                       onSelect={() => {
-                        setFormData({ ...formData, assigned_to_id: "" });
+                        setFormData({
+                          ...formData,
+                          assigned_to_id: "",
+                          assigned_team_id: "",
+                        });
                         setAssignOpen(false);
                       }}
                     >
                       <Check
                         className={cn(
                           "mr-2 h-4 w-4",
-                          !formData.assigned_to_id ? "opacity-100" : "opacity-0"
+                          !formData.assigned_to_id && !formData.assigned_team_id
+                            ? "opacity-100"
+                            : "opacity-0"
                         )}
                       />
                       Unassigned
                     </CommandItem>
+                  </CommandGroup>
+                  {teams.length > 0 && (
+                    <CommandGroup heading="Teams">
+                      {teams.map((teamOption) => (
+                        <CommandItem
+                          key={teamOption.id}
+                          value={`${teamOption.name} ${teamOption.description || ""}`.trim()}
+                          onSelect={() => {
+                            setFormData({
+                              ...formData,
+                              assigned_to_id: "",
+                              assigned_team_id: teamOption.id,
+                            });
+                            setAssignOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              formData.assigned_team_id === teamOption.id
+                                ? "opacity-100"
+                                : "opacity-0"
+                            )}
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate">{teamOption.name}</span>
+                            <span className="block truncate text-xs text-slate-500">
+                              {teamOption.member_count} member{teamOption.member_count === 1 ? "" : "s"}
+                            </span>
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                  <CommandGroup heading="People">
                     {users.map((u) => (
                       <CommandItem
                         key={u.id}
                         value={`${u.full_name || ""} ${u.email}`.trim()}
                         onSelect={() => {
-                          setFormData({ ...formData, assigned_to_id: u.id });
+                          setFormData({
+                            ...formData,
+                            assigned_to_id: u.id,
+                            assigned_team_id: "",
+                          });
                           setAssignOpen(false);
                         }}
                       >
@@ -387,7 +449,7 @@ export default function TaskForm({ onSuccess, onCancel, currentUser, task = null
         <div>
           <p className="font-medium">Private task</p>
           <p className="text-xs text-slate-500">
-            Only the assigner and assignee can view private tasks.
+            Only the assigner and the assigned person or team members can view private tasks.
           </p>
         </div>
       </div>
