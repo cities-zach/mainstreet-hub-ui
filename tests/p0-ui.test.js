@@ -31,6 +31,28 @@ test("public pages bypass member bootstrap and rejected sessions recover locally
   );
 });
 
+test("route pages are lazy-loaded behind accessible suspense fallbacks", async () => {
+  const app = await source("src/App.jsx");
+  const shell = await source("src/components/layout/AppShell.jsx");
+  const fallback = await source("src/components/system/PageLoadingFallback.jsx");
+  assert.doesNotMatch(app, /^import .* from "@\/pages\//m);
+  assert.match(app, /React\.lazy\(\(\) => import\("@\/pages\/Dashboard"\)\)/);
+  assert.match(app, /React\.lazy\(\(\) => import\("@\/pages\/DistrictMapPublic"\)\)/);
+  assert.match(app, /Suspense fallback=\{<PageLoadingFallback \/>\}/);
+  assert.match(shell, /Suspense fallback=\{<PageLoadingFallback compact \/>\}/);
+  assert.match(shell, /React\.lazy\(\(\) => import\("@\/components\/ai\/AIChatPanel"\)\)/);
+  assert.match(shell, /React\.lazy\(\(\) => import\("@\/components\/notifications\/NotificationsBell"\)\)/);
+  assert.match(fallback, /role="status"/);
+  assert.match(fallback, /aria-live="polite"/);
+});
+
+test("the production build enforces a strict entry-bundle budget", async () => {
+  const vite = await source("vite.config.js");
+  assert.match(vite, /enforceEntryBundleBudget\(maxBytes = 500 \* 1024\)/);
+  assert.match(vite, /output\.isEntry/);
+  assert.match(vite, /chunkSizeWarningLimit: 1700/);
+});
+
 test("password recovery is public, neutral, and handled through Supabase Auth", async () => {
   const app = await source("src/App.jsx");
   const login = await source("src/pages/Login.jsx");
