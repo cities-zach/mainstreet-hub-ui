@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bot,
@@ -24,11 +24,13 @@ import {
   Inbox,
   Layers3,
 } from "lucide-react";
-import AIChatPanel from "@/components/ai/AIChatPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import NotificationsBell from "@/components/notifications/NotificationsBell";
 import ErrorBoundary from "@/components/system/ErrorBoundary";
+import PageLoadingFallback from "@/components/system/PageLoadingFallback";
+
+const AIChatPanel = React.lazy(() => import("@/components/ai/AIChatPanel"));
+const NotificationsBell = React.lazy(() => import("@/components/notifications/NotificationsBell"));
 
 export default function AppShell({ me }) {
   const location = useLocation();
@@ -156,7 +158,9 @@ export default function AppShell({ me }) {
         </Link>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-          <NotificationsBell />
+          <Suspense fallback={<span className="h-10 w-10" aria-label="Loading notifications" />}>
+            <NotificationsBell />
+          </Suspense>
           <Button
             variant={chatOpen ? "ghost" : "default"}
             className={cn(
@@ -210,13 +214,17 @@ export default function AppShell({ me }) {
 
         <main className="flex-1 overflow-y-auto">
           <ErrorBoundary resetKey={location.pathname}>
-            <Outlet />
+            <Suspense fallback={<PageLoadingFallback compact />}>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </main>
 
         {chatOpen && (
           <div className="fixed bottom-4 right-2 left-2 sm:left-auto sm:right-4 z-50">
-            <AIChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+            <Suspense fallback={<div className="rounded-xl bg-white px-4 py-3 text-sm shadow-lg">Opening FRED…</div>}>
+              <AIChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+            </Suspense>
           </div>
         )}
       </div>

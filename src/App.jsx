@@ -1,75 +1,62 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/queryClient";
 import { apiFetch } from "@/api";
 import { supabase } from "@/lib/supabaseClient";
 
-/* ---------- CORE PAGES ---------- */
-import Dashboard from "@/pages/Dashboard";
-import MasterPlanner from "@/pages/MasterPlanner";
-import EventPlanForm from "@/pages/EventPlanForm";
-import MeetingNotes from "@/pages/MeetingNotes";
-import DocumentLibrary from "@/pages/DocumentLibrary";
-import ActionCenter from "@/pages/ActionCenter";
-
-/* ---------- BUDGET / FINANCE ---------- */
-import PocketBook from "@/pages/PocketBook";
-import BudgetDetails from "@/pages/BudgetDetails";
-
-/* ---------- MARKETING ---------- */
-import MarketStreet from "@/pages/MarketStreet";
-import CampaignWorkspace from "@/pages/CampaignWorkspace";
-import CreateRequest from "@/pages/CreateRequest";
-import RequestDetails from "@/pages/RequestDetails";
-
-/* ---------- FEEDBACK ---------- */
-import FeedBack from "@/pages/FeedBack";
-import SurveyBuilder from "@/pages/SurveyBuilder";
-import PublicSurvey from "@/pages/PublicSurvey";
-import SurveyResults from "@/pages/SurveyResults";
-
-/* ---------- TASKS ---------- */
-import TaskMaster from "@/pages/TaskMaster";
-
-/* ---------- CRM / INVESTORS ---------- */
-import CRM from "@/pages/CRM";
-import Outreach from "@/pages/Outreach";
-import WalkingTours from "@/pages/WalkingTours";
-import WalkingTourPublic from "@/pages/WalkingTourPublic";
-import DistrictMaps from "@/pages/DistrictMaps";
-import DistrictMapPublic from "@/pages/DistrictMapPublic";
-import Fundraising from "@/pages/Fundraising";
-import FundraisingPublic from "@/pages/FundraisingPublic";
-import Contests from "@/pages/Contests";
-import ContestPublic from "@/pages/ContestPublic";
-import InvestorTrack from "@/pages/InvestorTrack";
-
-/* ---------- INVENTORY ---------- */
-import SupplyStop from "@/pages/SupplyStop";
-
-/* ---------- VOLUNTEERS ---------- */
-import TeamBuilder from "@/pages/TeamBuilder";
-import WheelSpin from "@/pages/WheelSpin";
-import WheelSpinPresenter from "@/pages/WheelSpinPresenter";
-import PassportAdmin from "@/pages/PassportAdmin";
-import PassportPublic from "@/pages/PassportPublic";
-import Chat from "@/pages/Chat";
-import PhotoBooth from "@/pages/PhotoBooth";
-
-/* ---------- SETTINGS ---------- */
-import Settings from "@/pages/Settings";
-import UserManagement from "@/pages/UserManagement";
-import AiSessions from "@/pages/AiSessions";
 import AppShell from "@/components/layout/AppShell";
 import ErrorBoundary from "@/components/system/ErrorBoundary";
-import PolicyAcceptanceModal from "@/components/policies/PolicyAcceptanceModal";
-import NamePromptModal from "@/components/users/NamePromptModal";
-import Login from "@/pages/Login";
-import ResetPassword from "@/pages/ResetPassword";
-import InviteAccept from "@/pages/InviteAccept";
-import PrivacyPolicy from "@/pages/PrivacyPolicy";
-import TermsOfService from "@/pages/TermsOfService";
+import PageLoadingFallback from "@/components/system/PageLoadingFallback";
+
+// Route modules stay out of the entry bundle and load only when visited.
+const Dashboard = React.lazy(() => import("@/pages/Dashboard"));
+const MasterPlanner = React.lazy(() => import("@/pages/MasterPlanner"));
+const EventPlanForm = React.lazy(() => import("@/pages/EventPlanForm"));
+const MeetingNotes = React.lazy(() => import("@/pages/MeetingNotes"));
+const DocumentLibrary = React.lazy(() => import("@/pages/DocumentLibrary"));
+const ActionCenter = React.lazy(() => import("@/pages/ActionCenter"));
+const PocketBook = React.lazy(() => import("@/pages/PocketBook"));
+const BudgetDetails = React.lazy(() => import("@/pages/BudgetDetails"));
+const MarketStreet = React.lazy(() => import("@/pages/MarketStreet"));
+const CampaignWorkspace = React.lazy(() => import("@/pages/CampaignWorkspace"));
+const CreateRequest = React.lazy(() => import("@/pages/CreateRequest"));
+const RequestDetails = React.lazy(() => import("@/pages/RequestDetails"));
+const FeedBack = React.lazy(() => import("@/pages/FeedBack"));
+const SurveyBuilder = React.lazy(() => import("@/pages/SurveyBuilder"));
+const PublicSurvey = React.lazy(() => import("@/pages/PublicSurvey"));
+const SurveyResults = React.lazy(() => import("@/pages/SurveyResults"));
+const TaskMaster = React.lazy(() => import("@/pages/TaskMaster"));
+const CRM = React.lazy(() => import("@/pages/CRM"));
+const Outreach = React.lazy(() => import("@/pages/Outreach"));
+const WalkingTours = React.lazy(() => import("@/pages/WalkingTours"));
+const WalkingTourPublic = React.lazy(() => import("@/pages/WalkingTourPublic"));
+const DistrictMaps = React.lazy(() => import("@/pages/DistrictMaps"));
+const DistrictMapPublic = React.lazy(() => import("@/pages/DistrictMapPublic"));
+const Fundraising = React.lazy(() => import("@/pages/Fundraising"));
+const FundraisingPublic = React.lazy(() => import("@/pages/FundraisingPublic"));
+const Contests = React.lazy(() => import("@/pages/Contests"));
+const ContestPublic = React.lazy(() => import("@/pages/ContestPublic"));
+const InvestorTrack = React.lazy(() => import("@/pages/InvestorTrack"));
+const SupplyStop = React.lazy(() => import("@/pages/SupplyStop"));
+const TeamBuilder = React.lazy(() => import("@/pages/TeamBuilder"));
+const WheelSpin = React.lazy(() => import("@/pages/WheelSpin"));
+const WheelSpinPresenter = React.lazy(() => import("@/pages/WheelSpinPresenter"));
+const PassportAdmin = React.lazy(() => import("@/pages/PassportAdmin"));
+const PassportPublic = React.lazy(() => import("@/pages/PassportPublic"));
+const Chat = React.lazy(() => import("@/pages/Chat"));
+const PhotoBooth = React.lazy(() => import("@/pages/PhotoBooth"));
+const Settings = React.lazy(() => import("@/pages/Settings"));
+const UserManagement = React.lazy(() => import("@/pages/UserManagement"));
+const TeamManagement = React.lazy(() => import("@/pages/TeamManagement"));
+const AiSessions = React.lazy(() => import("@/pages/AiSessions"));
+const Login = React.lazy(() => import("@/pages/Login"));
+const ResetPassword = React.lazy(() => import("@/pages/ResetPassword"));
+const InviteAccept = React.lazy(() => import("@/pages/InviteAccept"));
+const PrivacyPolicy = React.lazy(() => import("@/pages/PrivacyPolicy"));
+const TermsOfService = React.lazy(() => import("@/pages/TermsOfService"));
+const PolicyAcceptanceModal = React.lazy(() => import("@/components/policies/PolicyAcceptanceModal"));
+const NamePromptModal = React.lazy(() => import("@/components/users/NamePromptModal"));
 
 const PUBLIC_PATH_PATTERNS = [
   /^\/invite\/?$/,
@@ -279,17 +266,21 @@ function AppInner() {
         <Route
           element={
             <>
-              <PolicyAcceptanceModal
-                isOpen={needsPolicyAcceptance}
-                policyVersions={policyVersions}
-                onAccepted={() =>
-                  queryClient.invalidateQueries({ queryKey: ["me"] })
-                }
-              />
-              <NamePromptModal
-                isOpen={needsNamePrompt}
-                onSaved={() => queryClient.invalidateQueries({ queryKey: ["me"] })}
-              />
+              {needsPolicyAcceptance && (
+                <PolicyAcceptanceModal
+                  isOpen
+                  policyVersions={policyVersions}
+                  onAccepted={() =>
+                    queryClient.invalidateQueries({ queryKey: ["me"] })
+                  }
+                />
+              )}
+              {needsNamePrompt && (
+                <NamePromptModal
+                  isOpen
+                  onSaved={() => queryClient.invalidateQueries({ queryKey: ["me"] })}
+                />
+              )}
               <AppShell me={me} />
             </>
           }
@@ -372,6 +363,7 @@ function AppInner() {
             }
           />
           <Route path="/settings/users" element={<UserManagement />} />
+          <Route path="/settings/teams" element={<TeamManagement />} />
           <Route path="/settings/ai-sessions" element={<AiSessions />} />
         </Route>
     </Routes>
@@ -383,7 +375,9 @@ export default function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <AppInner />
+          <Suspense fallback={<PageLoadingFallback />}>
+            <AppInner />
+          </Suspense>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

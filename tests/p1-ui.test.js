@@ -64,3 +64,26 @@ test("Document Library feature upgrade exposes folders, bulk upload, ACLs, and s
   assert.match(page, /signature_request/);
   assert.match(signatures, /initialRequestId/);
 });
+
+test("organization teams are managed centrally and selectable as document principals", async () => {
+  const app = await source("src/App.jsx");
+  const settings = await source("src/components/settings/UserManagementSection.jsx");
+  const teams = await source("src/pages/TeamManagement.jsx");
+  const permissions = await source("src/components/documents/PermissionsDialog.jsx");
+  assert.match(app, /path="\/settings\/teams"/);
+  assert.match(settings, /Manage Teams/);
+  assert.match(teams, /apiFetch\("\/teams"\)/);
+  assert.match(teams, /apiFetch\(`\/teams\/\$\{editor\.id\}`/);
+  assert.match(teams, /color: editor\.color,\s+members,/);
+  assert.match(permissions, /principal_type === "team"/);
+  assert.match(permissions, /value: `team:\$\{team\.id\}`/);
+});
+
+test("folder sorting supports persisted custom order with accessible controls", async () => {
+  const page = await source("src/pages/DocumentLibrary.jsx");
+  assert.match(page, /sort: folderSortMode/);
+  assert.match(page, /document-folders\/\$\{selectedFolder\.id\}\/order/);
+  assert.match(page, /Move \$\{document\.title\} up/);
+  assert.match(page, /Move \$\{document\.title\} down/);
+  assert.match(page, /Custom order/);
+});

@@ -17,9 +17,13 @@ const ROLE_LABELS = {
   super_admin: "Super Administrators",
 };
 
-function principalLabel(grant, users) {
+function principalLabel(grant, users, teams) {
   if (grant.principal_type === "organization") return "Everyone in the organization";
   if (grant.principal_type === "role") return ROLE_LABELS[grant.principal_id] || grant.principal_id;
+  if (grant.principal_type === "team") {
+    const team = teams.find((item) => item.id === grant.principal_id);
+    return team ? `Team: ${team.name}` : "Selected team";
+  }
   const user = users.find((item) => item.id === grant.principal_id);
   return user?.full_name || user?.email || "Selected user";
 }
@@ -40,6 +44,11 @@ export default function PermissionsDialog({ open, onOpenChange, resource, type =
     queryFn: () => apiFetch("/users/roster"),
     enabled: open,
   });
+  const teamsQuery = useQuery({
+    queryKey: ["document-permission-teams"],
+    queryFn: () => apiFetch("/teams"),
+    enabled: open,
+  });
   const permissionsQuery = useQuery({
     queryKey: ["document-permissions", type, resource?.id],
     queryFn: () => apiFetch(endpoint),
@@ -50,14 +59,19 @@ export default function PermissionsDialog({ open, onOpenChange, resource, type =
   const fredEnabled = draft?.fred_enabled ?? (permissionsQuery.data?.fred_enabled !== false);
   const inherit = draft?.inherit_folder_permissions ?? (permissionsQuery.data?.inherit_folder_permissions === true);
   const users = useMemo(() => usersQuery.data || [], [usersQuery.data]);
+  const teams = useMemo(() => teamsQuery.data || [], [teamsQuery.data]);
   const principalOptions = useMemo(() => [
     { value: "organization:", label: "Everyone in the organization" },
     ...Object.entries(ROLE_LABELS).map(([id, label]) => ({ value: `role:${id}`, label })),
+    ...teams.map((team) => ({
+      value: `team:${team.id}`,
+      label: `Team: ${team.name} (${team.member_count})`,
+    })),
     ...users.map((user) => ({
       value: `user:${user.id}`,
       label: user.full_name ? `${user.full_name} (${user.email})` : user.email,
     })),
-  ], [users]);
+  ], [teams, users]);
 
   const saveMutation = useMutation({
     mutationFn: () => apiFetch(endpoint, {
@@ -133,7 +147,7 @@ export default function PermissionsDialog({ open, onOpenChange, resource, type =
                 {grants.length === 0 && <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">Only the owner and administrators will retain access.</p>}
                 {grants.map((grant, index) => (
                   <div key={`${grant.principal_type}-${grant.principal_id}-${grant.access_level}-${index}`} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                    <div><p className="font-medium">{principalLabel(grant, users)}</p><p className="capitalize text-slate-500">{grant.access_level === "read" ? "View" : grant.access_level === "sign" ? "View and sign" : "Manage"}</p></div>
+                    <div><p className="font-medium">{principalLabel(grant, users, teams)}</p><p className="capitalize text-slate-500">{grant.access_level === "read" ? "View" : grant.access_level === "sign" ? "View and sign" : "Manage"}</p></div>
                     <Button size="icon" variant="ghost" aria-label="Remove grant" onClick={() => setDraft({ grants: grants.filter((_, grantIndex) => grantIndex !== index), fred_enabled: fredEnabled, inherit_folder_permissions: inherit })}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 ))}
