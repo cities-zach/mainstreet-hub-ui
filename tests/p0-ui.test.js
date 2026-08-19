@@ -70,6 +70,14 @@ test("password recovery is public, neutral, and handled through Supabase Auth", 
   assert.match(reset, /recoveryLinkHasError/);
 });
 
+test("invite acceptance reuses a matching session and returns to the invite after confirmation", async () => {
+  const invite = await source("src/pages/InviteAccept.jsx");
+  assert.match(invite, /let activeSession = existingSession\?\.session \|\| null/);
+  assert.match(invite, /if \(!activeSession\) \{/);
+  assert.match(invite, /emailRedirectTo: window\.location\.href/);
+  assert.match(invite, /apiFetch\("\/invites\/accept"/);
+});
+
 test("browser upload helper uses classified API storage routes", async () => {
   const uploads = await source("src/lib/uploads.js");
   assert.match(uploads, /files\/.*public.*private/);
