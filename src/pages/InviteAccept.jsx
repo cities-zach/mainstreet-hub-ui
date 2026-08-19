@@ -58,29 +58,36 @@ export default function InviteAccept() {
 
     try {
       const { data: existingSession } = await supabase.auth.getSession();
-      const existingEmail = existingSession?.session?.user?.email?.toLowerCase();
+      let activeSession = existingSession?.session || null;
+      const existingEmail = activeSession?.user?.email?.toLowerCase();
       if (existingEmail && existingEmail !== email.toLowerCase()) {
         await supabase.auth.signOut();
+        activeSession = null;
       }
 
-      const signUpResult = await supabase.auth.signUp({
-        email,
-        password,
-        options: fullName ? { data: { full_name: fullName } } : undefined,
-      });
+      if (!activeSession) {
+        const signUpResult = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: fullName ? { full_name: fullName } : undefined,
+            emailRedirectTo: window.location.href,
+          },
+        });
 
-      if (signUpResult.error) {
-        const message = signUpResult.error.message || "Sign up failed";
-        if (message.toLowerCase().includes("already registered")) {
-          const signInResult = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-          if (signInResult.error) {
-            throw signInResult.error;
+        if (signUpResult.error) {
+          const message = signUpResult.error.message || "Sign up failed";
+          if (message.toLowerCase().includes("already registered")) {
+            const signInResult = await supabase.auth.signInWithPassword({
+              email,
+              password,
+            });
+            if (signInResult.error) {
+              throw signInResult.error;
+            }
+          } else {
+            throw signUpResult.error;
           }
-        } else {
-          throw signUpResult.error;
         }
       }
 
