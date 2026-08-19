@@ -78,6 +78,22 @@ test("invite acceptance reuses a matching session and returns to the invite afte
   assert.match(invite, /apiFetch\("\/invites\/accept"/);
 });
 
+test("direct signups create reviewable access requests without entering the app", async () => {
+  const app = await source("src/App.jsx");
+  const login = await source("src/pages/Login.jsx");
+  const panel = await source("src/components/users/AccessRequestPanel.jsx");
+  const users = await source("src/pages/UserManagement.jsx");
+
+  assert.match(app, /AccessRequestPanel session=\{session\}/);
+  assert.match(login, /apiFetch\("\/access-requests"/);
+  assert.doesNotMatch(login, /apiFetch\("\/policies\/accept"/);
+  assert.match(panel, /apiFetch\("\/access-requests\/me"/);
+  assert.match(panel, /accepted_policies: acceptedPrivacy && acceptedTerms/);
+  assert.match(users, /Pending access requests/);
+  assert.match(users, /access-requests\/\$\{id\}\/approve/);
+  assert.match(users, /access-requests\/\$\{id\}\/deny/);
+});
+
 test("browser upload helper uses classified API storage routes", async () => {
   const uploads = await source("src/lib/uploads.js");
   assert.match(uploads, /files\/.*public.*private/);
