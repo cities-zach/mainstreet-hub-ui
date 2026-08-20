@@ -1,5 +1,6 @@
 import React from "react";
 import { sendClientErrorReport } from "@/api";
+import { claimDynamicImportReload } from "@/lib/chunk-recovery";
 
 const BOT_UA_PATTERN =
   /bot|crawl|spider|slurp|bingpreview|duckassist|facebookexternalhit|embedly|quora|pinterest|headless|lighthouse|preview|scanner/i;
@@ -26,6 +27,7 @@ function isLikelyBot() {
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
+    this.chunkRecoveryRequested = false;
     this.state = {
       hasError: false,
       error: null,
@@ -59,6 +61,21 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    if (this.chunkRecoveryRequested) return;
+
+    if (claimDynamicImportReload(error)) {
+      this.chunkRecoveryRequested = true;
+      console.warn(
+        "[ErrorBoundary] refreshing once to recover an unavailable deployment chunk"
+      );
+      try {
+        window.location.reload();
+        return;
+      } catch {
+        this.chunkRecoveryRequested = false;
+      }
+    }
+
     const componentStack = info?.componentStack || "";
     this.setState({ componentStack });
 
