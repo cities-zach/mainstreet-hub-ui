@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,41 +10,61 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus,
-  Users,
+  Archive,
   Calendar,
-  MapPin,
-  Clock,
-  Info,
+  CalendarDays,
   CheckCircle2,
+  ClipboardCheck,
+  Clock,
+  History,
+  Info,
+  MapPin,
+  Plus,
+  Settings2,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { apiFetch } from "@/api";
 
 import CreateOpportunityDialog from "@/components/teambuilder/CreateOpportunityDialog";
 import VolunteerManagerDialog from "@/components/teambuilder/VolunteerManagerDialog";
 
-/**
- * Props expected:
- * - currentUser
- * - isAdmin
- * - isEventChampion
- */
+const STATUS_STYLES = {
+  open: "border-green-200 bg-green-50 text-green-800",
+  filled: "border-blue-200 bg-blue-50 text-blue-800",
+  closed: "border-slate-300 bg-slate-100 text-slate-700",
+  ended: "border-slate-300 bg-slate-100 text-slate-700",
+  cancelled: "border-red-200 bg-red-50 text-red-800",
+  archived: "border-purple-200 bg-purple-50 text-purple-800",
+};
+
+const STATUS_LABELS = {
+  open: "Open",
+  filled: "Filled",
+  closed: "Closed",
+  ended: "Ended",
+  cancelled: "Cancelled",
+  archived: "Archived",
+};
+
+function formatJobDate(value) {
+  const isoDate = String(value || "").slice(0, 10);
+  const parsed = new Date(`${isoDate}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? "Date TBD" : format(parsed, "MMM d, yyyy");
+}
+
 export default function TeamBuilder() {
   const queryClient = useQueryClient();
-
   const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("upcoming");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [manageDialogOpen, setManageDialogOpen] = useState(false);
-  const [selectedJob, setSelectedJob] = useState(null);
+  const [managedJob, setManagedJob] = useState(null);
+  const [volunteerJob, setVolunteerJob] = useState(null);
 
   useEffect(() => {
     apiFetch("/me")
@@ -52,73 +72,74 @@ export default function TeamBuilder() {
       .catch(() => setUser(null));
   }, []);
 
-  /**
-   * DATA
-   */
-  const { data: jobs = [], isLoading: jobsLoading } = useQuery({
-    queryKey: ["volunteer_jobs"],
-    queryFn: () => apiFetch("/volunteer/jobs"),
-  });
-
-  const { data: events = [] } = useQuery({
-    queryKey: ["events"],
-    queryFn: () => apiFetch("/events"),
+  const {
+    data: jobs = [],
+    isLoading: jobsLoading,
+    isError: jobsError,
+  } = useQuery({
+    queryKey: ["volunteer_jobs", "all"],
+    queryFn: () => apiFetch("/volunteer/jobs?scope=all"),
   });
 
   const { data: assignments = [] } = useQuery({
-    queryKey: ["volunteer_assignments"],
-    queryFn: () => apiFetch("/volunteer/assignments"),
+    queryKey: ["volunteer_assignments", "self", user?.id],
+    queryFn: () => apiFetch(`/volunteer/assignments?user_id=${user.id}`),
+    enabled: Boolean(user?.id),
   });
-
-  /**
-   * HELPERS
-   */
-  const getAssignmentsForJob = (jobId) =>
-    assignments.filter((a) => a.volunteer_job_id === jobId);
 
   const getUserAssignment = (jobId) =>
     assignments.find(
-      (a) =>
-        a.volunteer_job_id === jobId &&
-        a.user_id === user?.id
+      (assignment) =>
+        assignment.volunteer_job_id === jobId && assignment.user_id === user?.id
     );
 
-  /**
-   * GROUP JOBS BY EVENT
-   */
-  const groupedJobs = jobs.reduce((acc, job) => {
-    let eventName = job.event_name;
+  const role = user?.app_role || user?.role;
+  const isAdminOrChampion = ["admin", "super_admin", "event_champion"].includes(role);
 
-    if (!eventName && job.event_id) {
-      const evt = events.find((e) => e.id === job.event_id);
-      if (evt) eventName = evt.title || evt.name;
-    }
+  const counts = useMemo(
+    () => ({
+      upcoming: jobs.filter((job) => job.lifecycle_group === "upcoming").length,
+      past: jobs.filter((job) => job.lifecycle_group === "past").length,
+      archived: jobs.filter((job) => job.lifecycle_group === "archived").length,
+    }),
+    [jobs]
+  );
 
-    eventName = eventName || "General Opportunities";
-    if (!acc[eventName]) acc[eventName] = [];
-    acc[eventName].push(job);
-    return acc;
-  }, {});
+  const visibleJobs = useMemo(() => {
+    const multiplier = activeTab === "past" ? -1 : 1;
+    return jobs
+      .filter((job) => job.lifecycle_group === activeTab)
+      .sort((first, second) =>
+        String(first.date || "").localeCompare(String(second.date || "")) * multiplier
+      );
+  }, [activeTab, jobs]);
 
-  const sortedGroups = Object.keys(groupedJobs).sort((a, b) => {
-    if (a === "General Opportunities") return 1;
-    if (b === "General Opportunities") return -1;
-    return a.localeCompare(b);
+  const groupedJobs = useMemo(
+    () =>
+      visibleJobs.reduce((groups, job) => {
+        const eventName = job.event_name || "General Opportunities";
+        if (!groups.has(eventName)) groups.set(eventName, []);
+        groups.get(eventName).push(job);
+        return groups;
+      }, new Map()),
+    [visibleJobs]
+  );
+
+  const pendingInvites = assignments.filter((assignment) => {
+    if (assignment.status !== "invited" || assignment.user_id !== user?.id) return false;
+    const job = jobs.find((candidate) => candidate.id === assignment.volunteer_job_id);
+    return job?.can_accept_assignments;
   });
 
-  /**
-   * MUTATIONS
-   */
   const signUpMutation = useMutation({
     mutationFn: async (job) => {
       if (!user) throw new Error("Missing user");
-      const name = user.full_name || user.email || "Volunteer";
       await apiFetch("/volunteer/assignments", {
         method: "POST",
         body: JSON.stringify({
           volunteer_job_id: job.id,
           user_id: user.id,
-          name,
+          name: user.full_name || user.email || "Volunteer",
           email: user.email || null,
           phone: user.phone || user.phone_number || "",
           status: "accepted",
@@ -127,66 +148,59 @@ export default function TeamBuilder() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volunteer_jobs"] });
-      queryClient.invalidateQueries({
-        queryKey: ["volunteer_assignments"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["volunteer_assignments"] });
       toast.success("You are signed up!");
     },
-    onError: () => toast.error("Failed to sign up"),
+    onError: (error) => toast.error(error?.message || "Failed to sign up"),
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async (assignment) => {
-      await apiFetch(`/volunteer/assignments/${assignment.id}`, {
-        method: "DELETE",
-      });
-    },
+    mutationFn: (assignment) =>
+      apiFetch(`/volunteer/assignments/${assignment.id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volunteer_jobs"] });
-      queryClient.invalidateQueries({
-        queryKey: ["volunteer_assignments"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["volunteer_assignments"] });
       toast.success("Volunteer commitment cancelled");
     },
-    onError: () => toast.error("Failed to cancel"),
+    onError: (error) => toast.error(error?.message || "Failed to cancel"),
   });
 
   const acceptInviteMutation = useMutation({
-    mutationFn: async (assignment) => {
-      await apiFetch(`/volunteer/assignments/${assignment.id}`, {
+    mutationFn: (assignment) =>
+      apiFetch(`/volunteer/assignments/${assignment.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: "accepted" }),
-      });
-    },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volunteer_jobs"] });
-      queryClient.invalidateQueries({
-        queryKey: ["volunteer_assignments"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["volunteer_assignments"] });
       toast.success("Invitation accepted!");
     },
+    onError: (error) => toast.error(error?.message || "Failed to accept invitation"),
   });
 
-  const isAdminOrChampion =
-    user?.app_role === "admin" ||
-    user?.app_role === "super_admin" ||
-    user?.app_role === "event_champion" ||
-    user?.role === "admin" ||
-    user?.role === "super_admin" ||
-    user?.role === "event_champion";
+  const emptyCopy = {
+    upcoming: {
+      title: "No upcoming volunteer opportunities",
+      body: "Past opportunities are kept under Past so attendance and volunteer hours remain available.",
+    },
+    past: {
+      title: "No past volunteer opportunities",
+      body: "Completed and ended opportunities will appear here for attendance and historical reporting.",
+    },
+    archived: {
+      title: "No archived volunteer opportunities",
+      body: "Archiving clears an opportunity from active work without deleting its history.",
+    },
+  }[activeTab];
 
-  /**
-   * RENDER
-   */
   return (
-    <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto space-y-8">
-
-        {/* Header */}
-        <div className="flex justify-between items-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 transition-colors duration-300 dark:from-slate-950 dark:to-slate-900 md:p-8">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h1 className="text-4xl font-bold flex items-center gap-3 text-[#2d4650] dark:text-slate-100">
-              <Users className="w-10 h-10" />
+            <h1 className="flex items-center gap-3 text-4xl font-bold text-[#2d4650] dark:text-slate-100">
+              <Users className="h-10 w-10" />
               TeamBuilder
             </h1>
             <p className="text-slate-500 dark:text-slate-400">
@@ -197,216 +211,232 @@ export default function TeamBuilder() {
           {isAdminOrChampion && (
             <Button
               onClick={() => setCreateDialogOpen(true)}
-              className="bg-[#835879] text-white gap-2"
+              className="gap-2 bg-[#835879] text-white"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="h-5 w-5" />
               Create Opportunity
             </Button>
           )}
         </div>
 
-        {/* Pending Invites */}
-        {user &&
-          assignments.some(
-            (a) =>
-              a.user_id === user.id &&
-              a.status === "invited"
-          ) && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold">
-                Pending Invitations
-              </h2>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {assignments
-                  .filter(
-                    (a) =>
-                      a.user_id === user.id &&
-                      a.status === "invited"
-                  )
-                  .map((invite) => {
-                    const job = jobs.find(
-                      (j) => j.id === invite.volunteer_job_id
-                    );
-                    if (!job) return null;
-
-                    return (
-                      <Alert
-                        key={invite.id}
-                        className="bg-amber-50 border-amber-200"
+        {pendingInvites.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Pending Invitations</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {pendingInvites.map((invite) => {
+                const job = jobs.find((candidate) => candidate.id === invite.volunteer_job_id);
+                if (!job) return null;
+                return (
+                  <Alert key={invite.id} className="border-amber-200 bg-amber-50">
+                    <Info className="h-4 w-4 text-amber-600" />
+                    <AlertTitle>Invitation: {job.title}</AlertTitle>
+                    <AlertDescription className="mt-2">
+                      <p className="mb-2 text-sm">
+                        {job.event_name || "General Opportunities"} · {formatJobDate(job.date)}
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={() => acceptInviteMutation.mutate(invite)}
+                        className="bg-amber-600 text-white"
                       >
-                        <Info className="h-4 w-4 text-amber-600" />
-                        <AlertTitle>
-                          Invitation: {job.title}
-                        </AlertTitle>
-                        <AlertDescription className="mt-2">
-                          <p className="text-sm mb-2">
-                            {job.event_name} •{" "}
-                            {format(new Date(job.date), "MMM d")}
-                          </p>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              acceptInviteMutation.mutate(invite)
-                            }
-                            className="bg-amber-600 text-white"
-                          >
-                            Accept Invitation
-                          </Button>
-                        </AlertDescription>
-                      </Alert>
-                    );
-                  })}
-              </div>
+                        Accept Invitation
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                );
+              })}
             </div>
-          )}
-
-        {/* Job Listings */}
-        {jobsLoading ? (
-          <div className="text-center p-12">
-            Loading opportunities…
           </div>
+        )}
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className={`grid w-full max-w-2xl ${isAdminOrChampion ? "grid-cols-3" : "grid-cols-2"}`}>
+            <TabsTrigger value="upcoming" className="gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Upcoming ({counts.upcoming})
+            </TabsTrigger>
+            <TabsTrigger value="past" className="gap-2">
+              <History className="h-4 w-4" />
+              Past ({counts.past})
+            </TabsTrigger>
+            {isAdminOrChampion && (
+              <TabsTrigger value="archived" className="gap-2">
+                <Archive className="h-4 w-4" />
+                Archived ({counts.archived})
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </Tabs>
+
+        {jobsLoading ? (
+          <div className="p-12 text-center">Loading opportunities…</div>
+        ) : jobsError ? (
+          <Alert variant="destructive">
+            <AlertTitle>TeamBuilder could not load</AlertTitle>
+            <AlertDescription>Refresh the page or try again in a moment.</AlertDescription>
+          </Alert>
+        ) : visibleJobs.length === 0 ? (
+          <Card className="border-dashed bg-white/70">
+            <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+              <CalendarDays className="h-10 w-10 text-slate-400" />
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">{emptyCopy.title}</h2>
+                <p className="mt-1 max-w-xl text-sm text-slate-500">{emptyCopy.body}</p>
+              </div>
+            </CardContent>
+          </Card>
         ) : (
           <div className="space-y-10">
-            {sortedGroups.map((group) => (
-              <div key={group}>
-                <h2 className="text-2xl font-bold mb-4">
-                  {group}
-                </h2>
+            {Array.from(groupedJobs.entries()).map(([group, groupJobs]) => (
+              <section key={group} aria-labelledby={`group-${group.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}>
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <h2
+                    id={`group-${group.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}
+                    className="text-2xl font-bold"
+                  >
+                    {group}
+                  </h2>
+                  {groupJobs[0]?.event_id && (
+                    <Badge variant="outline" className="text-xs">MasterPlanner</Badge>
+                  )}
+                </div>
 
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {groupedJobs[group].map((job) => {
-                    const assignmentsForJob = getAssignmentsForJob(job.id);
-                    const acceptedCount = assignmentsForJob.filter(
-                      (assignment) => assignment.status === "accepted"
-                    ).length;
-                    const filledCount =
-                      Number.isFinite(Number(job.count_filled)) &&
-                      Number(job.count_filled) >= 0
-                        ? Number(job.count_filled)
-                        : acceptedCount;
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {groupJobs.map((job) => {
+                    const filledCount = Number(job.count_filled) || 0;
                     const neededCount = Number(job.count_needed) || 0;
                     const remainingCount = Math.max(neededCount - filledCount, 0);
-                    const userAssignment =
-                      getUserAssignment(job.id);
-                    const isSignedUp =
-                      userAssignment?.status === "accepted";
-                    const isInvited =
-                      userAssignment?.status === "invited";
-                    const isFull =
-                      neededCount > 0
-                        ? filledCount >= neededCount
-                        : job.count_filled >= job.count_needed;
+                    const userAssignment = getUserAssignment(job.id);
+                    const isSignedUp = userAssignment?.status === "accepted";
+                    const isInvited = userAssignment?.status === "invited";
+                    const effectiveStatus = job.effective_status || job.status || "open";
+                    const canAccept = job.can_accept_assignments === true;
 
                     return (
                       <Card key={job.id} className="flex flex-col">
                         <CardHeader>
-                          <Badge>
-                            {isFull ? "Filled" : "Open"}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className={STATUS_STYLES[effectiveStatus]}>
+                              {STATUS_LABELS[effectiveStatus] || effectiveStatus}
+                            </Badge>
+                            {job.pending_attendance_count > 0 && (
+                              <Badge className="border-amber-200 bg-amber-100 text-amber-900">
+                                <ClipboardCheck className="mr-1 h-3 w-3" />
+                                {job.pending_attendance_count} attendance pending
+                              </Badge>
+                            )}
+                          </div>
                           <CardTitle>{job.title}</CardTitle>
                           <CardDescription>
-                            <Calendar className="inline w-3 h-3 mr-1" />
-                            {format(
-                              new Date(job.date),
-                              "MMM d, yyyy"
-                            )}
+                            <Calendar className="mr-1 inline h-3 w-3" />
+                            {formatJobDate(job.date)}
                           </CardDescription>
                         </CardHeader>
 
                         <CardContent className="flex-1 space-y-2">
                           <div className="text-sm">
-                            <Clock className="inline w-4 h-4 mr-1" />
+                            <Clock className="mr-1 inline h-4 w-4" />
                             {job.schedule || "TBD"}
                           </div>
                           {neededCount > 0 && (
                             <div className="text-sm">
-                              <Users className="inline w-4 h-4 mr-1" />
+                              <Users className="mr-1 inline h-4 w-4" />
                               {filledCount === 0
                                 ? `${neededCount} slots available`
                                 : `${remainingCount}/${neededCount} slots available`}
                             </div>
                           )}
                           <div className="text-sm">
-                            <MapPin className="inline w-4 h-4 mr-1" />
+                            <MapPin className="mr-1 inline h-4 w-4" />
                             {job.location || "TBD"}
                           </div>
                         </CardContent>
 
-                        <CardFooter className="flex gap-2">
+                        <CardFooter className="flex flex-wrap gap-2">
                           {isSignedUp ? (
                             <>
-                              <Button
-                                disabled
-                                className="flex-1"
-                              >
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                Signed Up
+                              <Button disabled className="min-w-0 flex-1">
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                {job.lifecycle_group === "past" ? "Commitment recorded" : "Signed Up"}
                               </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() =>
-                                  cancelMutation.mutate(
-                                    userAssignment
-                                  )
-                                }
-                              >
-                                Cancel
-                              </Button>
+                              {job.lifecycle_group === "upcoming" && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => cancelMutation.mutate(userAssignment)}
+                                >
+                                  Cancel
+                                </Button>
+                              )}
                             </>
-                          ) : isInvited ? (
+                          ) : isInvited && canAccept ? (
                             <Button
-                              className="w-full"
-                              onClick={() =>
-                                acceptInviteMutation.mutate(
-                                  userAssignment
-                                )
-                              }
+                              className="flex-1"
+                              onClick={() => acceptInviteMutation.mutate(userAssignment)}
                             >
                               Accept Invite
                             </Button>
                           ) : (
                             <Button
-                              className="flex-1 bg-[#835879] text-white"
-                              disabled={isFull}
-                              onClick={() =>
-                                signUpMutation.mutate(job)
-                              }
+                              className="min-w-0 flex-1 bg-[#835879] text-white"
+                              disabled={!canAccept}
+                              onClick={() => signUpMutation.mutate(job)}
                             >
-                              {isFull ? "Full" : "Sign Up"}
+                              {canAccept ? "Sign Up" : STATUS_LABELS[effectiveStatus] || "Unavailable"}
                             </Button>
                           )}
 
-                          {isAdminOrChampion && (
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedJob(job);
-                                setManageDialogOpen(true);
-                              }}
-                            >
-                              <UserPlus className="w-4 h-4" />
-                            </Button>
+                          {job.can_manage && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setVolunteerJob(job)}
+                                aria-label={`Manage volunteers for ${job.title}`}
+                                title="Manage volunteers"
+                              >
+                                <UserPlus className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setManagedJob(job)}
+                                aria-label={`Manage opportunity ${job.title}`}
+                                title="Manage opportunity"
+                              >
+                                <Settings2 className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                         </CardFooter>
                       </Card>
                     );
                   })}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}
 
-        <CreateOpportunityDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
-        />
+        {createDialogOpen && (
+          <CreateOpportunityDialog
+            open
+            onOpenChange={setCreateDialogOpen}
+          />
+        )}
 
-        {selectedJob && (
+        {managedJob && (
+          <CreateOpportunityDialog
+            job={managedJob}
+            open={Boolean(managedJob)}
+            onOpenChange={(open) => !open && setManagedJob(null)}
+          />
+        )}
+
+        {volunteerJob && (
           <VolunteerManagerDialog
-            job={selectedJob}
-            open={manageDialogOpen}
-            onOpenChange={setManageDialogOpen}
+            job={volunteerJob}
+            open={Boolean(volunteerJob)}
+            onOpenChange={(open) => !open && setVolunteerJob(null)}
             currentUser={user}
           />
         )}

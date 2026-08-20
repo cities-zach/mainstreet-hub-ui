@@ -428,11 +428,16 @@ export default function EventPlanForm() {
       setFormData(result.event);
       setSaveState("saved");
       setLastSavedAt(result.event.updated_at || new Date().toISOString());
+      const volunteerSummary = result.summary.volunteer_jobs || {
+        created: 0,
+        updated: 0,
+        removed: 0,
+      };
       toast.success(
-        `TaskMaster synced: ${result.summary.created} created, ${result.summary.updated} updated, ${result.summary.removed} removed`
+        `Synced tasks (${result.summary.created} created, ${result.summary.updated} updated) and volunteer opportunities (${volunteerSummary.created} created, ${volunteerSummary.updated} updated, ${volunteerSummary.removed} archived)`
       );
     } catch (error) {
-      toast.error(error?.message || "Failed to sync TaskMaster changes");
+      toast.error(error?.message || "Failed to sync downstream changes");
     }
   };
 
@@ -536,7 +541,7 @@ export default function EventPlanForm() {
                 className={needsSync ? "bg-blue-600 text-white hover:bg-blue-700" : ""}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
-                {needsSync ? "Sync changes" : "TaskMaster synced"}
+                {needsSync ? "Sync changes" : "Tasks & volunteers synced"}
               </Button>
             )}
             <Button

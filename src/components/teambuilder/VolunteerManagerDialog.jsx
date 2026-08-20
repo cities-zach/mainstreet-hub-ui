@@ -20,8 +20,15 @@ import {
   CommandList
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Check, ChevronsUpDown, UserPlus, Mail, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, ClipboardCheck, UserPlus, Mail, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/api";
 import { cn } from "@/lib/utils";
@@ -32,10 +39,12 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
   const [inviteData, setInviteData] = useState({ userId: "" });
   const [nonUserData, setNonUserData] = useState({ name: "", email: "", phone: "" });
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [attendanceDrafts, setAttendanceDrafts] = useState({});
+  const acceptsAssignments = job?.can_accept_assignments === true;
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
-    queryFn: () => apiFetch("/users"),
+    queryFn: () => apiFetch("/users/roster"),
     enabled: open
   });
 
@@ -72,7 +81,7 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
       onOpenChange(false);
       setInviteData({ userId: "" });
     },
-    onError: () => toast.error("Failed to send invitation")
+    onError: (error) => toast.error(error?.message || "Failed to send invitation")
   });
 
   const addNonUserMutation = useMutation({
@@ -97,7 +106,7 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
       onOpenChange(false);
       setNonUserData({ name: "", email: "", phone: "" });
     },
-    onError: () => toast.error("Failed to add volunteer")
+    onError: (error) => toast.error(error?.message || "Failed to add volunteer")
   });
 
   const removeAssignmentMutation = useMutation({
@@ -111,7 +120,34 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
       queryClient.invalidateQueries({ queryKey: ["volunteer_jobs"] });
       toast.success("Volunteer removed");
     },
-    onError: () => toast.error("Failed to remove volunteer")
+    onError: (error) => toast.error(error?.message || "Failed to remove volunteer")
+  });
+
+  const updateAttendanceMutation = useMutation({
+    mutationFn: ({ assignmentId, attendance_status, hours_completed }) =>
+      apiFetch(`/volunteer/assignments/${assignmentId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          attendance_status,
+          hours_completed:
+            hours_completed === "" || hours_completed == null
+              ? attendance_status === "attended"
+                ? Number(job?.hours) || 0
+                : 0
+              : Number(hours_completed),
+        }),
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["volunteer_assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["volunteer_jobs"] });
+      setAttendanceDrafts((current) => {
+        const next = { ...current };
+        delete next[variables.assignmentId];
+        return next;
+      });
+      toast.success("Volunteer attendance saved");
+    },
+    onError: (error) => toast.error(error?.message || "Failed to save attendance")
   });
 
   const handleInvite = () => {
@@ -131,11 +167,28 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
     removeAssignmentMutation.mutate(assignment);
   };
 
-  const isAdmin =
-    currentUser?.app_role === "admin" ||
-    currentUser?.app_role === "super_admin" ||
-    currentUser?.role === "admin" ||
-    currentUser?.role === "super_admin";
+  const updateAttendanceDraft = (assignment, field, value) => {
+    setAttendanceDrafts((current) => ({
+      ...current,
+      [assignment.id]: {
+        attendance_status: assignment.attendance_status || "pending",
+        hours_completed: assignment.hours_completed ?? "",
+        ...current[assignment.id],
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveAttendance = (assignment) => {
+    const draft = attendanceDrafts[assignment.id] || {};
+    updateAttendanceMutation.mutate({
+      assignmentId: assignment.id,
+      attendance_status: draft.attendance_status || "pending",
+      hours_completed: draft.hours_completed,
+    });
+  };
+
+  const canManageAssignments = job?.can_manage === true;
 
   const getUserLabel = (user) => {
     if (!user) return "Unknown user";
@@ -152,9 +205,16 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
         <DialogHeader>
           <DialogTitle>Manage Volunteers</DialogTitle>
           <DialogDescription>
-            Invite a registered user or add a non-user volunteer.
+            {job?.title ? `${job.title}. ` : ""}
+            Invite volunteers and record attendance without removing their history.
           </DialogDescription>
         </DialogHeader>
+
+        {!acceptsAssignments && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Signups are closed for this opportunity. Existing volunteer attendance can still be recorded below.
+          </div>
+        )}
 
         <Tabs defaultValue="invite" value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2">
@@ -171,6 +231,7 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
                     variant="outline"
                     role="combobox"
                     className="w-full justify-between overflow-hidden"
+                    disabled={!acceptsAssignments}
                   >
                     <span className="truncate">
                       {inviteData.userId ? getUserLabel(selectedUser) : "Select a user…"}
@@ -211,7 +272,7 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
             <Button
               onClick={handleInvite}
               className="w-full bg-[#835879] hover:bg-[#6d4a64]"
-              disabled={inviteMutation.isPending}
+              disabled={inviteMutation.isPending || !acceptsAssignments}
             >
               <Mail className="w-4 h-4 mr-2" />
               Send Invitation
@@ -225,6 +286,7 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
                 value={nonUserData.name}
                 onChange={(e) => setNonUserData({ ...nonUserData, name: e.target.value })}
                 placeholder="John Doe"
+                disabled={!acceptsAssignments}
               />
             </div>
             <div className="space-y-2">
@@ -234,6 +296,7 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
                 value={nonUserData.email}
                 onChange={(e) => setNonUserData({ ...nonUserData, email: e.target.value })}
                 placeholder="john@example.com"
+                disabled={!acceptsAssignments}
               />
               <p className="text-xs text-slate-500">Confirmation email is disabled for now.</p>
             </div>
@@ -243,12 +306,13 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
                 value={nonUserData.phone}
                 onChange={(e) => setNonUserData({ ...nonUserData, phone: e.target.value })}
                 placeholder="555-0123"
+                disabled={!acceptsAssignments}
               />
             </div>
             <Button
               onClick={handleAddNonUser}
               className="w-full bg-[#835879] hover:bg-[#6d4a64]"
-              disabled={addNonUserMutation.isPending}
+              disabled={addNonUserMutation.isPending || !acceptsAssignments}
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Add Volunteer
@@ -261,28 +325,84 @@ export default function VolunteerManagerDialog({ job, open, onOpenChange, curren
             <Label className="text-sm font-semibold mb-3 block">
               Current Volunteers ({jobAssignments.length})
             </Label>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {jobAssignments.map(assignment => (
-                <div key={assignment.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${assignment.status === "accepted" ? "bg-green-500" : "bg-amber-500"}`} />
-                    <span className="text-sm font-medium">{assignment.name}</span>
-                    {assignment.is_non_user && (
-                      <Badge variant="secondary" className="text-xs">Non-user</Badge>
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              {jobAssignments.map((assignment) => {
+                const draft = attendanceDrafts[assignment.id] || {
+                  attendance_status: assignment.attendance_status || "pending",
+                  hours_completed: assignment.hours_completed ?? "",
+                };
+                const preservePastRecord =
+                  job?.lifecycle_group === "past" && assignment.status === "accepted";
+                return (
+                  <div key={assignment.id} className="space-y-3 rounded-lg bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className={`h-2 w-2 shrink-0 rounded-full ${assignment.status === "accepted" ? "bg-green-500" : "bg-amber-500"}`} />
+                        <span className="truncate text-sm font-medium">{assignment.name}</span>
+                        {assignment.is_non_user && (
+                          <Badge variant="secondary" className="text-xs">Non-user</Badge>
+                        )}
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {assignment.status}
+                        </Badge>
+                      </div>
+                      {(assignment.is_non_user || canManageAssignments) && !preservePastRecord && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-red-500 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => handleRemove(assignment)}
+                          aria-label={`Remove ${assignment.name} from this opportunity`}
+                          title={`Remove ${assignment.name}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {assignment.status === "accepted" && (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_100px_auto]">
+                        <Select
+                          value={draft.attendance_status}
+                          onValueChange={(value) =>
+                            updateAttendanceDraft(assignment, "attendance_status", value)
+                          }
+                        >
+                          <SelectTrigger aria-label={`Attendance for ${assignment.name}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="attended">Attended</SelectItem>
+                            <SelectItem value="partial">Partial</SelectItem>
+                            <SelectItem value="did_not_attend">Did not attend</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          value={draft.hours_completed}
+                          onChange={(event) =>
+                            updateAttendanceDraft(assignment, "hours_completed", event.target.value)
+                          }
+                          aria-label={`Hours completed by ${assignment.name}`}
+                          placeholder="Hours"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => saveAttendance(assignment)}
+                          disabled={updateAttendanceMutation.isPending}
+                        >
+                          <ClipboardCheck className="mr-2 h-4 w-4" />
+                          Save
+                        </Button>
+                      </div>
                     )}
                   </div>
-                  {(assignment.is_non_user || isAdmin) && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => handleRemove(assignment)}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
